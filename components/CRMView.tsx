@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
-import { Manifest, Submission } from '../types';
-import { DB } from '../services/dbService';
+import { Manifest, Submission, ClientRecord } from '../types';
+import { DB } from '../services/dbService'; // Keep for type, but data is passed in
 
 interface CRMViewProps {
   manifests: Manifest[];
@@ -11,19 +11,29 @@ interface CRMViewProps {
 
 const CRMView: React.FC<CRMViewProps> = ({ manifests, submissions, onSelectClient }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [localClients, setLocalClients] = useState<ClientRecord[]>([]);
+
+  // Since we are now using async DB, we rely on App.tsx to pass data down, 
+  // or we could fetch here. But App.tsx already passes submissions. 
+  // We need to derive clients from submissions or fetch clients passed in.
+  // Wait, App.tsx wasn't passing `clients` prop to CRMView in the original file provided.
+  // I need to update App.tsx to pass clients or CRMView to fetch them.
+  // The provided App.tsx update passes clients? No, it passes manifests and submissions.
+  // Let's assume for now we construct the view from the passed submissions or fetch.
+  // Actually, to keep it clean, let's fetch in useEffect.
   
-  const clients = useMemo(() => {
-    // Fixed: DB.getClients expects 0 arguments
-    let list = DB.getClients();
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      list = list.filter(c => 
-        c.name.toLowerCase().includes(term) || 
-        c.id.toLowerCase().includes(term)
-      );
-    }
-    return list;
-  }, [submissions, searchTerm]);
+  React.useEffect(() => {
+    DB.getClients().then(setLocalClients);
+  }, [submissions]);
+
+  const filteredClients = useMemo(() => {
+    if (!searchTerm) return localClients;
+    const term = searchTerm.toLowerCase();
+    return localClients.filter(c => 
+      c.name.toLowerCase().includes(term) || 
+      c.id.toLowerCase().includes(term)
+    );
+  }, [localClients, searchTerm]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -53,7 +63,7 @@ const CRMView: React.FC<CRMViewProps> = ({ manifests, submissions, onSelectClien
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
-            {clients.map(client => (
+            {filteredClients.map(client => (
               <tr 
                 key={client.id}
                 onClick={() => onSelectClient(client.id)}
@@ -77,12 +87,15 @@ const CRMView: React.FC<CRMViewProps> = ({ manifests, submissions, onSelectClien
                 </td>
                 <td className="px-8 py-6 text-right">
                   <p className="font-bold text-slate-600">
-                    {new Date(client.submissions[client.submissions.length - 1].timestamp).toLocaleDateString()}
+                    {client.submissions.length > 0 
+                      ? new Date(client.submissions[0].timestamp).toLocaleDateString()
+                      : 'N/A'
+                    }
                   </p>
                 </td>
               </tr>
             ))}
-            {clients.length === 0 && (
+            {filteredClients.length === 0 && (
               <tr>
                 <td colSpan={3} className="px-8 py-32 text-center text-slate-300 font-black uppercase tracking-[0.2em] text-xs">
                   Directory Depleted

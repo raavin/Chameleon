@@ -18,11 +18,11 @@ export interface ResearchNode {
   title: string;
   url: string;
   content_summary: string;
+  cached_content?: string; // New: Stores the full text/analysis locally
   benchmark_metrics: Record<string, any>;
   tags: string[];
 }
 
-// Added LegislationLibrary type to fix import errors in Engine.tsx and LegislationViewer.tsx
 export type LegislationLibrary = Record<string, {
   act_name: string;
   section_title: string;
@@ -38,7 +38,7 @@ export interface Field {
   options?: string[];
   default_value?: any;
   section_citation?: string;
-  research_node_id?: string; // Link to research/benchmarks
+  research_node_id?: string;
   is_identity_field?: boolean;
   ui_config?: {
     grid_span?: 1 | 2;

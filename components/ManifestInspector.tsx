@@ -48,10 +48,30 @@ const ManifestInspector: React.FC<ManifestInspectorProps> = ({ manifest }) => {
              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">Research Nodes</h3>
              <div className="space-y-4">
                 {primaryDomain?.research_artifacts?.map((art, i) => (
-                  <div key={art.id || i} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
-                    <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">{art.source}</p>
+                  <div key={art.id || i} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl group/art hover:border-emerald-200 transition-all">
+                    <div className="flex justify-between items-start mb-2">
+                      <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">{art.source}</p>
+                      {art.cached_content && (
+                        <button
+                          onClick={() => {
+                            const blob = new Blob([art.cached_content!], { type: 'text/plain' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            // Sanitize title for filename
+                            const safeTitle = art.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                            a.download = `${safeTitle}.txt`;
+                            a.click();
+                          }}
+                          className="text-[9px] font-black text-slate-400 hover:text-emerald-600 uppercase tracking-widest flex items-center gap-1"
+                        >
+                          Download Text ↓
+                        </button>
+                      )}
+                    </div>
                     <p className="text-sm font-bold text-slate-800 mt-1">{art.title}</p>
                     <p className="text-[10px] text-slate-400 mt-2 line-clamp-2">{art.content_summary}</p>
+                    {art.url && <a href={art.url} target="_blank" rel="noreferrer" className="text-[9px] text-blue-400 mt-2 block hover:underline truncate">{art.url}</a>}
                   </div>
                 ))}
                 {(!primaryDomain?.research_artifacts || primaryDomain.research_artifacts.length === 0) && (

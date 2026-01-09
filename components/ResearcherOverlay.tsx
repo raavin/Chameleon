@@ -26,13 +26,15 @@ const ResearcherOverlay: React.FC<ResearcherOverlayProps> = ({ stream }) => {
       else if (trimmed.startsWith('[DOWNLOAD]')) {
         const msg = trimmed.replace('[DOWNLOAD]', '').trim();
         extractedSteps.push({ type: 'DOWNLOAD', msg });
-        // Extract filename roughly
-        const match = msg.match(/Saving (.*?) to/);
+        // Extract filename more flexibly
+        // Matches: "Saving filename.pdf..." or "Saving filename.pdf"
+        const match = msg.match(/Saving\s+(.*?)(?:\s+\.\.\.|\s+to|$)/i);
         if (match && match[1]) files.push(match[1]);
-        else files.push("document_artifact.pdf");
+        else files.push(msg.replace(/^Saving\s+/i, '').split(' ')[0] || "Unknown Document");
       }
       else if (trimmed.startsWith('[SCAN]')) extractedSteps.push({ type: 'SCAN', msg: trimmed.replace('[SCAN]', '').trim() });
       else if (trimmed.startsWith('[COMPLIANCE]')) extractedSteps.push({ type: 'COMPLIANCE', msg: trimmed.replace('[COMPLIANCE]', '').trim() });
+      else if (trimmed.startsWith('[SYSTEM]')) extractedSteps.push({ type: 'SYSTEM', msg: trimmed.replace('[SYSTEM]', '').trim() });
     });
     return { steps: extractedSteps, downloadedFiles: files };
   }, [stream]);
@@ -68,7 +70,8 @@ const ResearcherOverlay: React.FC<ResearcherOverlayProps> = ({ stream }) => {
                   <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest min-w-[80px] text-center ${
                     step.type === 'SEARCH' ? 'bg-blue-500/20 text-blue-400' :
                     step.type === 'DOWNLOAD' ? 'bg-emerald-500/20 text-emerald-400' :
-                    step.type === 'SCAN' ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-500/20 text-slate-400'
+                    step.type === 'SCAN' ? 'bg-amber-500/20 text-amber-400' : 
+                    step.type === 'SYSTEM' ? 'bg-fuchsia-500/20 text-fuchsia-400' : 'bg-slate-500/20 text-slate-400'
                   }`}>
                     {step.type}
                   </span>

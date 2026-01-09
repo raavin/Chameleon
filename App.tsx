@@ -24,15 +24,18 @@ export default function App() {
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
 
+  // Initial Data Load
   useEffect(() => {
     refreshData();
   }, []);
 
   const refreshData = async () => {
     const ms = await DB.getAllManifests();
+    const subs = await DB.getSubmissions();
+    const cls = await DB.getClients();
     setManifests(ms);
-    setSubmissions(DB.getSubmissions());
-    setClients(DB.getClients());
+    setSubmissions(subs);
+    setClients(cls);
   };
 
   const handleBuild = async (ctx: BuildContext) => {
@@ -41,14 +44,15 @@ export default function App() {
     try {
       const generated = await compileManifest(ctx, (chunk) => setStreamOutput(prev => prev + chunk));
       
-      // SAVE THE MANIFEST
-      DB.saveManifest(generated);
+      // SAVE THE MANIFEST (Merge/Overwrite handled by DB logic usually, but here we just put)
+      await DB.saveManifest(generated);
       
       // SAVE THE RESEARCH DOCUMENTS LOCALLY
+      // Iterate through research nodes and save them to the 'research_artifacts' store
       if (generated.domains && generated.domains[0] && generated.domains[0].research_artifacts) {
-        generated.domains[0].research_artifacts.forEach(artifact => {
-          DB.saveResearchArtifact(artifact);
-        });
+        for (const artifact of generated.domains[0].research_artifacts) {
+          await DB.saveResearchArtifact(artifact);
+        }
       }
 
       await refreshData();
@@ -57,15 +61,15 @@ export default function App() {
       setActiveDomainId(generated.domains[0]?.id || '');
       setSelectedClientId(null);
       setViewMode('intake');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Deep Research Node Failure. JSON structure corrupted or research timed out.");
+      alert(`Deep Research Node Failure: ${err.message || "Unknown error"}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSubmission = (data: any) => {
+  const handleSubmission = async (data: any) => {
     const manifest = manifests.find(m => m.id === activeManifestId);
     const domain = manifest?.domains.find(d => d.id === activeDomainId);
     if (!domain || !manifest) return;
@@ -82,8 +86,8 @@ export default function App() {
       status: 'FINALIZED'
     };
     
-    DB.saveSubmission(submission);
-    refreshData();
+    await DB.saveSubmission(submission);
+    await refreshData();
     setSelectedClientId(subId);
     setViewMode('client_360');
   };
