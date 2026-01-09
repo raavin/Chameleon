@@ -1,0 +1,92 @@
+
+{
+  "id": "proto_melb_fvr_001",
+  "version": "v5.2-static",
+  "compiled_at": "2025-03-24T10:00:00Z",
+  "config": {
+    "currency": "AUD",
+    "locale": "en-AU",
+    "theme": "modern",
+    "region": "Melbourne, Australia"
+  },
+  "domains": [
+    {
+      "id": "fvr_domain",
+      "title": "Family Violence Recovery",
+      "subject_identifier_field": "full_name",
+      "sections": [
+        {
+          "id": "identity",
+          "title": "Identity & Verification",
+          "description": "Core demographics as per Privacy Act 1988 (Cth).",
+          "field_ids": ["full_name", "dob", "medicare_number"]
+        },
+        {
+          "id": "safety",
+          "title": "Safety & Contact",
+          "description": "Risk assessment and secure contact protocols.",
+          "field_ids": ["safe_contact_method", "primary_phone", "safe_times", "risk_level"]
+        }
+      ],
+      "fields": [
+        {
+          "id": "full_name",
+          "label": "Full Legal Name",
+          "type": "text",
+          "is_identity_field": true,
+          "ui_config": { "grid_span": 2 }
+        },
+        {
+          "id": "dob",
+          "label": "Date of Birth",
+          "type": "date",
+          "is_identity_field": true,
+          "ui_config": { "grid_span": 1 }
+        },
+        {
+          "id": "medicare_number",
+          "label": "Medicare Number",
+          "type": "text",
+          "ui_config": { "grid_span": 1, "help_text": "Required for clinical billing." }
+        },
+        {
+          "id": "safe_contact_method",
+          "label": "Safe Contact Method",
+          "type": "select",
+          "options": ["Phone Call", "SMS Only", "Signal/WhatsApp", "Third Party Only"],
+          "ui_config": { "grid_span": 2 }
+        },
+        {
+          "id": "primary_phone",
+          "label": "Primary Phone Number",
+          "type": "text",
+          "ui_config": { "grid_span": 1 }
+        },
+        {
+          "id": "safe_times",
+          "label": "Safe Times to Contact",
+          "type": "textarea",
+          "ui_config": { "grid_span": 2 }
+        },
+        {
+          "id": "risk_level",
+          "label": "Assessed Risk Level",
+          "type": "select",
+          "options": ["Low", "Medium", "High", "Critical"],
+          "ui_config": { "grid_span": 1 }
+        }
+      ],
+      "governance_rules": [
+        { "action": "require_manager_approval", "description": "High risk cases require manager review." }
+      ]
+    }
+  ],
+  "library": {
+    "privacy_1988": {
+      "act_name": "Privacy Act 1988 (Cth)",
+      "section_title": "Schedule 1 — Australian Privacy Principles",
+      "content": "An APP entity must not collect personal information unless the information is reasonably necessary for one or more of the entity's functions or activities.",
+      "analysis": "This field is mandatory to satisfy Identity Verification requirements under Federal Law."
+    }
+  }
+}

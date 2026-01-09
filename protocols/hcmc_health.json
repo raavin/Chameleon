@@ -1,0 +1,74 @@
+
+{
+  "id": "proto_hcmc_health_01",
+  "version": "v1.0",
+  "compiled_at": "2025-03-24T12:00:00Z",
+  "config": {
+    "currency": "VND",
+    "locale": "vi-VN",
+    "theme": "modern",
+    "region": "Ho Chi Minh City, VN"
+  },
+  "domains": [
+    {
+      "id": "health_outreach",
+      "title": "Public Health Outreach",
+      "subject_identifier_field": "full_name",
+      "sections": [
+        {
+          "id": "patient",
+          "title": "Patient Verification",
+          "field_ids": ["full_name", "age", "location_district"]
+        },
+        {
+          "id": "clinical",
+          "title": "Outreach Assessment",
+          "field_ids": ["symptoms", "intervention_required", "vitals_photo"]
+        }
+      ],
+      "fields": [
+        {
+          "id": "full_name",
+          "label": "Patient Full Name",
+          "type": "text",
+          "is_identity_field": true,
+          "ui_config": { "grid_span": 2 }
+        },
+        {
+          "id": "age",
+          "label": "Age",
+          "type": "number",
+          "ui_config": { "grid_span": 1 }
+        },
+        {
+          "id": "location_district",
+          "label": "District",
+          "type": "select",
+          "options": ["District 1", "District 3", "District 5", "District 7", "Thu Duc"],
+          "ui_config": { "grid_span": 1 }
+        },
+        {
+          "id": "symptoms",
+          "label": "Primary Symptoms",
+          "type": "multiselect",
+          "options": ["Fever", "Cough", "Joint Pain", "Nausea", "Fatigue"],
+          "ui_config": { "grid_span": 2 }
+        },
+        {
+          "id": "intervention_required",
+          "label": "Emergency Referral?",
+          "type": "bool",
+          "ui_config": { "grid_span": 1 }
+        },
+        {
+          "id": "vitals_photo",
+          "label": "Vitals/Chart Capture",
+          "type": "photo",
+          "ui_config": { "grid_span": 1 }
+        }
+      ],
+      "governance_rules": []
+    }
+  ],
+  "library": {}
+}

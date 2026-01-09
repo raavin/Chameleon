@@ -1,0 +1,7 @@
+{
+  "name": "The Chameleon Protocol",
+  "description": "A self-generating, legally compliant, offline-first operating system for community services. It uses Gemini to compile local laws into a secure, bespoken application manifest.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

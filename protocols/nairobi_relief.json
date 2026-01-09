@@ -1,0 +1,75 @@
+
+{
+  "id": "proto_nairobi_relief_01",
+  "version": "v1.0",
+  "compiled_at": "2025-03-24T12:00:00Z",
+  "config": {
+    "currency": "KES",
+    "locale": "en-KE",
+    "theme": "modern",
+    "region": "Nairobi, Kenya"
+  },
+  "domains": [
+    {
+      "id": "relief_logistics",
+      "title": "Food Relief Logistics",
+      "subject_identifier_field": "full_name",
+      "sections": [
+        {
+          "id": "beneficiary_id",
+          "title": "Beneficiary Identity",
+          "description": "Registration of relief recipient.",
+          "field_ids": ["full_name", "national_id", "household_size"]
+        },
+        {
+          "id": "distribution",
+          "title": "Distribution Details",
+          "description": "Tracking of allocated resources.",
+          "field_ids": ["relief_type", "amount_distributed", "collection_point"]
+        }
+      ],
+      "fields": [
+        {
+          "id": "full_name",
+          "label": "Beneficiary Name",
+          "type": "text",
+          "is_identity_field": true,
+          "ui_config": { "grid_span": 2 }
+        },
+        {
+          "id": "national_id",
+          "label": "National ID / Passport",
+          "type": "text",
+          "ui_config": { "grid_span": 1 }
+        },
+        {
+          "id": "household_size",
+          "label": "Household Size",
+          "type": "number",
+          "ui_config": { "grid_span": 1 }
+        },
+        {
+          "id": "relief_type",
+          "label": "Relief Type",
+          "type": "select",
+          "options": ["Maize Meal", "Rice", "Oil", "Medicine", "Cash Transfer"],
+          "ui_config": { "grid_span": 2 }
+        },
+        {
+          "id": "amount_distributed",
+          "label": "Amount (Units/Value)",
+          "type": "number",
+          "ui_config": { "grid_span": 1 }
+        },
+        {
+          "id": "collection_point",
+          "label": "Distribution Node",
+          "type": "text",
+          "ui_config": { "grid_span": 1 }
+        }
+      ],
+      "governance_rules": []
+    }
+  ],
+  "library": {}
+}

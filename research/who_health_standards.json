@@ -1,0 +1,13 @@
+
+{
+  "id": "res_who_001",
+  "source": "WHO",
+  "title": "Global Strategy for Dengue Prevention and Control",
+  "url": "https://www.who.int/publications/i/item/9789241504034",
+  "content_summary": "Comprehensive framework for surveillance, diagnosis, and outbreak response for Dengue and other arboviral diseases.",
+  "benchmark_metrics": {
+    "case_fatality_rate_target": "<0.1%",
+    "notifiable_within": "24 hours"
+  },
+  "tags": ["epidemiology", "health_standards"]
+}
