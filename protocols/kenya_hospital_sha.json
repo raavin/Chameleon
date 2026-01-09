@@ -1,0 +1,413 @@
+{
+  "id": "proto_kenya_hospital_sha_01",
+  "version": "7.0-legislative-deep-dive",
+  "compiled_at": "2026-01-09T00:37:00.200Z",
+  "config": {
+    "currency": "KES",
+    "locale": "en-KE",
+    "theme": "modern",
+    "region": "Kenya"
+  },
+  "domains": [
+    {
+      "id": "dom_hospital_ke_01",
+      "title": "Kenya Hospital Management & SHA Compliance",
+      "research_artifacts": [
+        {
+          "id": "doc_sha_2023",
+          "source": "Gov",
+          "title": "Social Health Insurance Act, 2023",
+          "url": "http://kenyalaw.org/kl/fileadmin/pdfdownloads/Acts/2023/SocialHealthInsuranceAct_No.16of2023.pdf",
+          "content_summary": "Establishes the Social Health Authority (SHA), replacing NHIF. Mandates registration, biometric validation, and defines the three funds: PHC Fund, SHI Fund, and ECC Fund.",
+          "tags": ["legislation", "insurance", "biometrics"]
+        },
+        {
+          "id": "doc_dha_2023",
+          "source": "Gov",
+          "title": "Digital Health Act, 2023",
+          "url": "http://kenyalaw.org/kl/fileadmin/pdfdownloads/Acts/2023/DigitalHealthAct_No.15of2023.pdf",
+          "content_summary": "Establishes the framework for e-health, data interoperability, and the Integrated Health Information System (IHIS). Mandates integration with IPRS.",
+          "tags": ["legislation", "digital-health", "IPRS"]
+        },
+        {
+          "id": "doc_dpa_2019",
+          "source": "Gov",
+          "title": "Data Protection Act, 2019",
+          "url": "http://kenyalaw.org/kl/fileadmin/pdfdownloads/Acts/2019/TheDataProtectionAct__No24of2019.pdf",
+          "content_summary": "Regulates the processing of personal data. Classifies health data as 'Sensitive Personal Data' requiring specific safeguards and consent.",
+          "tags": ["legislation", "privacy", "compliance"]
+        },
+        {
+          "id": "doc_ppb_trace",
+          "source": "Local",
+          "title": "PPB Guidelines on Good Distribution Practices",
+          "url": "https://web.pharmacyboardkenya.org/",
+          "content_summary": "Standards for the supply chain of pharmaceuticals, including batch tracking to prevent counterfeits.",
+          "tags": ["standard", "inventory", "pharmacy"]
+        }
+      ],
+      "sections": [
+        {
+          "id": "sec_registration_sha",
+          "title": "1. Admission & SHA Verification (IPRS Integration)",
+          "description": "Mandatory patient identification and benefit eligibility check via SHA/IPRS integration points.",
+          "field_ids": [
+            "fld_nat_id",
+            "fld_iprs_validation_status",
+            "fld_sha_number",
+            "fld_biometric_hash",
+            "fld_biometric_consent",
+            "fld_sha_fund_type",
+            "fld_next_of_kin_contact"
+          ]
+        },
+        {
+          "id": "sec_clinical_reporting",
+          "title": "2. Clinical Data & DHIS2 Reporting",
+          "description": "Capture of clinical data mapped to Ministry of Health (MOH) indicators for automated DHIS2 uplifts.",
+          "field_ids": [
+            "fld_triage_category",
+            "fld_icd11_diagnosis",
+            "fld_moh_705_mapping",
+            "fld_referral_type",
+            "fld_practitioner_kmpdc_no"
+          ]
+        },
+        {
+          "id": "sec_inventory_trace",
+          "title": "3. Pharmacy Track & Trace",
+          "description": "Inventory management controls to prevent counterfeit medication and ensure expiry compliance.",
+          "field_ids": [
+            "fld_drug_generic_name",
+            "fld_drug_batch_no",
+            "fld_drug_expiry",
+            "fld_serialization_code",
+            "fld_supplier_license_check"
+          ]
+        },
+        {
+          "id": "sec_billing_claims",
+          "title": "4. Billing & Claims (Tiered)",
+          "description": "Financial processing based on gazetted SHA benefit packages.",
+          "field_ids": [
+            "fld_service_code",
+            "fld_claim_pre_auth_no",
+            "fld_bill_tier_category",
+            "fld_patient_copay",
+            "fld_claim_submission_date"
+          ]
+        }
+      ],
+      "fields": [
+        {
+          "id": "fld_nat_id",
+          "label": "National ID / Alien ID Number",
+          "type": "text",
+          "is_identity_field": true,
+          "section_citation": "DHA_2023_S18",
+          "ui_config": {
+            "grid_span": 1,
+            "help_text": "Primary key for IPRS Integration. Required for adults >18."
+          }
+        },
+        {
+          "id": "fld_iprs_validation_status",
+          "label": "IPRS Verification Status",
+          "type": "select",
+          "options": ["Pending", "Verified", "Failed", "Manual Override"],
+          "is_identity_field": false,
+          "section_citation": "DHA_2023_S18",
+          "ui_config": {
+            "grid_span": 1,
+            "help_text": "Must be 'Verified' for SHA claims processing."
+          }
+        },
+        {
+          "id": "fld_sha_number",
+          "label": "SHA Member Number",
+          "type": "text",
+          "is_identity_field": true,
+          "section_citation": "SHA_ACT_2023_S26",
+          "ui_config": {
+            "grid_span": 1,
+            "help_text": "Unique Social Health Authority identifier."
+          }
+        },
+        {
+          "id": "fld_biometric_hash",
+          "label": "Biometric Verification Token",
+          "type": "text",
+          "is_identity_field": false,
+          "section_citation": "SHA_ACT_2023_S26",
+          "ui_config": {
+            "grid_span": 2,
+            "help_text": "Cryptographic hash returned from fingerprint scanner confirming patient presence."
+          }
+        },
+        {
+          "id": "fld_biometric_consent",
+          "label": "Data Processing Consent (DPA 2019)",
+          "type": "bool",
+          "is_identity_field": false,
+          "section_citation": "DPA_2019_S25",
+          "ui_config": {
+            "grid_span": 2,
+            "help_text": "Patient explicit consent to process Sensitive Personal Data (Health & Biometric)."
+          }
+        },
+        {
+          "id": "fld_sha_fund_type",
+          "label": "SHA Benefit Fund",
+          "type": "select",
+          "options": [
+            "Primary Health Care Fund",
+            "Social Health Insurance Fund",
+            "Emergency, Chronic & Critical Illness Fund"
+          ],
+          "is_identity_field": false,
+          "section_citation": "SHA_ACT_2023_S25",
+          "ui_config": {
+            "grid_span": 2,
+            "help_text": "Determines the reimbursement tier."
+          }
+        },
+        {
+          "id": "fld_next_of_kin_contact",
+          "label": "Next of Kin Contact",
+          "type": "text",
+          "is_identity_field": false,
+          "ui_config": {
+            "grid_span": 1,
+            "help_text": "Emergency contact phone number."
+          }
+        },
+        {
+          "id": "fld_triage_category",
+          "label": "Triage Category",
+          "type": "select",
+          "options": ["Green (Non-Urgent)", "Yellow (Urgent)", "Orange (Very Urgent)", "Red (Emergency)"],
+          "is_identity_field": false,
+          "ui_config": {
+            "grid_span": 1,
+            "help_text": "South African Triage Scale classification."
+          }
+        },
+        {
+          "id": "fld_icd11_diagnosis",
+          "label": "Diagnosis (ICD-11)",
+          "type": "relationship",
+          "options": ["ICD-11 Database"],
+          "is_identity_field": false,
+          "section_citation": "DHA_2023_S45",
+          "ui_config": {
+            "grid_span": 2,
+            "help_text": "Mandatory standard for e-health interoperability."
+          }
+        },
+        {
+          "id": "fld_moh_705_mapping",
+          "label": "MOH 705 Indicator Category",
+          "type": "select",
+          "options": ["Malaria", "Upper Respiratory Tract Infection", "Diarrhea", "Pneumonia", "Other"],
+          "is_identity_field": false,
+          "section_citation": "DHA_2023_S45",
+          "ui_config": {
+            "grid_span": 1,
+            "help_text": "Required for automated DHIS2 aggregate reporting."
+          }
+        },
+        {
+          "id": "fld_referral_type",
+          "label": "Referral Type",
+          "type": "select",
+          "options": ["Self-Referral", "Facility Referral (Up)", "Facility Referral (Down)", "Emergency Transfer"],
+          "is_identity_field": false,
+          "ui_config": {
+            "grid_span": 1,
+            "help_text": "Source of patient referral."
+          }
+        },
+        {
+          "id": "fld_practitioner_kmpdc_no",
+          "label": "Attending Doctor KMPDC License",
+          "type": "text",
+          "is_identity_field": false,
+          "section_citation": "KMPDC_STD",
+          "ui_config": {
+            "grid_span": 1,
+            "help_text": "Required for claim validity."
+          }
+        },
+        {
+          "id": "fld_drug_generic_name",
+          "label": "Drug Generic Name",
+          "type": "text",
+          "is_identity_field": false,
+          "ui_config": {
+            "grid_span": 1,
+            "help_text": "WHO INN standard name."
+          }
+        },
+        {
+          "id": "fld_drug_batch_no",
+          "label": "Pharmaceutical Batch Number",
+          "type": "text",
+          "is_identity_field": false,
+          "section_citation": "PPB_GUIDELINES",
+          "ui_config": {
+            "grid_span": 1,
+            "help_text": "Critical for recall management and anti-counterfeit."
+          }
+        },
+        {
+          "id": "fld_drug_expiry",
+          "label": "Drug Expiry Date",
+          "type": "date",
+          "is_identity_field": false,
+          "section_citation": "PPB_GUIDELINES",
+          "ui_config": {
+            "grid_span": 1,
+            "help_text": "Must not be expired at time of dispensing."
+          }
+        },
+        {
+          "id": "fld_serialization_code",
+          "label": "GS1/2D Barcode Scan",
+          "type": "text",
+          "is_identity_field": false,
+          "section_citation": "PPB_GUIDELINES",
+          "ui_config": {
+            "grid_span": 1,
+            "help_text": "Scan the 2D matrix on the medicine pack."
+          }
+        },
+        {
+          "id": "fld_supplier_license_check",
+          "label": "Supplier PPB License Verified",
+          "type": "bool",
+          "is_identity_field": false,
+          "section_citation": "PPB_GUIDELINES",
+          "ui_config": {
+            "grid_span": 1,
+            "help_text": "Confirm supplier has valid PPB license."
+          }
+        },
+        {
+          "id": "fld_service_code",
+          "label": "SHA Service Code",
+          "type": "text",
+          "is_identity_field": false,
+          "section_citation": "SHA_ACT_2023_REG",
+          "ui_config": {
+            "grid_span": 1,
+            "help_text": "Gazetted SHA benefit package code."
+          }
+        },
+        {
+          "id": "fld_claim_pre_auth_no",
+          "label": "SHA Pre-Authorization Code",
+          "type": "text",
+          "is_identity_field": false,
+          "section_citation": "SHA_ACT_2023_REG",
+          "ui_config": {
+            "grid_span": 1,
+            "help_text": "Required for specialised procedures or inpatient care > 3 days."
+          }
+        },
+        {
+          "id": "fld_bill_tier_category",
+          "label": "Billing Tier",
+          "type": "select",
+          "options": ["Tier 1 (Dispensary/Clinic)", "Tier 2 (Health Centre)", "Tier 3 (Sub-County Hospital)", "Tier 4 (County Referral)", "Tier 5 (National Referral)"],
+          "is_identity_field": false,
+          "ui_config": {
+            "grid_span": 1,
+            "help_text": "Facility level determines reimbursement rates."
+          }
+        },
+        {
+          "id": "fld_patient_copay",
+          "label": "Patient Co-Payment (KES)",
+          "type": "number",
+          "is_identity_field": false,
+          "ui_config": {
+            "grid_span": 1,
+            "help_text": "Amount payable by patient after SHA coverage."
+          }
+        },
+        {
+          "id": "fld_claim_submission_date",
+          "label": "Claim Submission Date",
+          "type": "date",
+          "is_identity_field": false,
+          "ui_config": {
+            "grid_span": 1,
+            "help_text": "Date claim was submitted to SHA."
+          }
+        }
+      ],
+      "governance_rules": [
+        {
+          "description": "All health data transmission to the Digital Health Superhighway must be encrypted according to Data Protection Act 2019 standards."
+        },
+        {
+          "description": "Biometric verification is mandatory for claim submission to the Social Health Authority to prevent fraud."
+        },
+        {
+          "description": "Inventory disposal of expired medication must be logged and reported to the Pharmacy and Poisons Board."
+        }
+      ],
+      "subject_identifier_field": "fld_nat_id"
+    }
+  ],
+  "library": {
+    "SHA_ACT_2023_S26": {
+      "act_name": "Social Health Insurance Act 2023",
+      "section_title": "Section 26: Registration and Membership",
+      "content": "Every person resident in Kenya shall be registered as a member of the Social Health Authority... using the Integrated Population Registration System as the primary source of data.",
+      "analysis": "This creates a hard dependency on IPRS data. The application must validate the National ID against IPRS before creating a local patient record."
+    },
+    "SHA_ACT_2023_S25": {
+      "act_name": "Social Health Insurance Act 2023",
+      "section_title": "Section 25: Funds of the Authority",
+      "content": "Establishes (a) Primary Health Care Fund, (b) Social Health Insurance Fund, (c) Emergency, Chronic and Critical Illness Fund.",
+      "analysis": "Billing logic must segregate claims into these three buckets based on the diagnosis and facility level (Level 2/3 for PHC, Level 4/5 for SHIF/ECC)."
+    },
+    "SHA_ACT_2023_REG": {
+      "act_name": "Social Health Insurance Act 2023",
+      "section_title": "SHA Regulations - Claims Processing",
+      "content": "Claims for specialised procedures or extended inpatient care require pre-authorization from the Authority.",
+      "analysis": "Pre-auth workflow must be integrated for high-cost procedures."
+    },
+    "DHA_2023_S18": {
+      "act_name": "Digital Health Act 2023",
+      "section_title": "Section 18: Integrated Health Information System",
+      "content": "The System shall facilitate the collection... of health data... and ensure interoperability with the Integrated Population Registration System.",
+      "analysis": "Mandates the technical integration of the hospital system with the government's central identity database."
+    },
+    "DHA_2023_S45": {
+      "act_name": "Digital Health Act 2023",
+      "section_title": "Section 45: Health Data Standards",
+      "content": "All health information systems shall use ICD-11 for diagnosis coding and submit aggregate data to DHIS2.",
+      "analysis": "Requires ICD-11 integration and MOH 705/DHIS2 reporting compliance."
+    },
+    "DPA_2019_S25": {
+      "act_name": "Data Protection Act 2019",
+      "section_title": "Section 25: Principles of Data Protection",
+      "content": "Data controllers shall ensure that personal data is... processed lawfully, fairly and in a transparent manner... [and] collected for explicit, specified and legitimate purposes.",
+      "analysis": "Requires explicit checkbox consent from the patient before capturing biometrics or sharing data with SHA/MOH."
+    },
+    "PPB_GUIDELINES": {
+      "act_name": "Pharmacy and Poisons Act (Cap 244)",
+      "section_title": "Guidelines on Good Distribution Practice",
+      "content": "Distributors must ensure a robust system to identify and prevent the entry of falsified medicines... including batch traceability.",
+      "analysis": "Basis for the 'Track and Trace' module requirements (Batch #, Expiry, Serialization)."
+    },
+    "KMPDC_STD": {
+      "act_name": "Medical Practitioners and Dentists Act",
+      "section_title": "KMPDC Registration Requirements",
+      "content": "Every medical practitioner must hold a valid license from the Kenya Medical Practitioners and Dentists Council.",
+      "analysis": "Claim validation requires verification of practitioner KMPDC license number."
+    }
+  }
+}

@@ -1,5 +1,6 @@
 
-import { Manifest, Submission, ClientRecord, ResearchNode } from '../types';
+import { Manifest, Submission, ClientRecord, ResearchNode, DocumentMetadata } from '../types';
+import { DocumentService } from './documentService';
 
 const DOCUMENTS_SUBMISSIONS = 'chameleon_doc_submissions';
 const DOCUMENTS_MANIFESTS = 'chameleon_doc_manifests';
@@ -20,7 +21,8 @@ export const DB = {
     const staticPaths = [
       './protocols/melbourne_fvr.json',
       './protocols/nairobi_relief.json',
-      './protocols/hcmc_health.json'
+      './protocols/hcmc_health.json',
+      './protocols/kenya_hospital_sha.json'
     ];
 
     const staticManifests: Manifest[] = [];
@@ -127,5 +129,46 @@ export const DB = {
 
   getResearchArtifacts(): ResearchNode[] {
     return JSON.parse(localStorage.getItem(DOCUMENTS_RESEARCH) || '[]');
+  },
+
+  /**
+   * Initializes document tracking for all artifacts in loaded manifests.
+   * Should be called after manifests are loaded to ensure version tracking.
+   */
+  async initializeDocumentTracking(): Promise<{ tracked: number; new: number }> {
+    const manifests = await this.getAllManifests();
+    let tracked = 0;
+    let newDocs = 0;
+
+    for (const manifest of manifests) {
+      for (const domain of manifest.domains) {
+        if (domain.research_artifacts) {
+          for (const artifact of domain.research_artifacts) {
+            const existing = DocumentService.getDocumentMetadata(artifact.id);
+            if (!existing) {
+              DocumentService.createMetadataFromArtifact(artifact);
+              newDocs++;
+            }
+            tracked++;
+          }
+        }
+      }
+    }
+
+    return { tracked, new: newDocs };
+  },
+
+  /**
+   * Gets document tracking statistics
+   */
+  getDocumentTrackingStats() {
+    return DocumentService.getTrackingStats();
+  },
+
+  /**
+   * Gets documents due for refresh/re-scan
+   */
+  getDocumentsDueForRefresh(): DocumentMetadata[] {
+    return DocumentService.getDocumentsDueForRefresh();
   }
 };
