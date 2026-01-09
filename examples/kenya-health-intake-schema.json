@@ -1,0 +1,616 @@
+{
+  "meta": {
+    "schemaVersion": "1.0.0",
+    "generatedDate": "2026-01-09T10:00:00Z",
+    "generatedBy": "Chameleon Multi-Agent System v0.1",
+    "targetRegion": "Kenya",
+    "targetCountry": "KE",
+    "domain": "healthcare-intake",
+    "language": "en-KE",
+    "culturalContext": {
+      "namingConventions": "Given name + Family name (Western style most common in urban areas)",
+      "dateFormat": "DD/MM/YYYY",
+      "addressFormat": "County-based administrative structure",
+      "notes": "Swahili widely spoken; consider bilingual labels"
+    }
+  },
+  "compliance": {
+    "laws": [
+      {
+        "id": "kdpa-2019",
+        "name": "Kenya Data Protection Act",
+        "reference": "Act No. 24 of 2019",
+        "enactedDate": "2019-11-08",
+        "requirements": [
+          "Explicit consent required for personal data collection",
+          "Purpose limitation - data only used for stated purpose",
+          "Data minimization - collect only necessary information",
+          "Right to access and correction",
+          "Data breach notification within 72 hours"
+        ],
+        "source": "http://kenyalaw.org/kl/fileadmin/pdfdownloads/Acts/2019/TheDataProtectionAct_No24of2019.pdf",
+        "relevantSections": ["Part III - Data Protection Principles", "Part IV - Rights of Data Subjects"]
+      },
+      {
+        "id": "kenyan-constitution-privacy",
+        "name": "Constitution of Kenya - Right to Privacy",
+        "reference": "Article 31",
+        "enactedDate": "2010-08-27",
+        "requirements": [
+          "Right to privacy including health information"
+        ],
+        "source": "http://www.kenyalaw.org/lex/actview.xql?actid=Const2010"
+      },
+      {
+        "id": "hiv-aids-prevention",
+        "name": "HIV and AIDS Prevention and Control Act",
+        "reference": "Act No. 14 of 2006",
+        "requirements": [
+          "Confidentiality of HIV status",
+          "Informed consent for HIV testing",
+          "Specific protections for health data"
+        ],
+        "source": "http://kenyalaw.org/kl/fileadmin/pdfdownloads/Acts/HIVandAIDSPreventionandControlActNo14of2006.pdf"
+      }
+    ],
+    "standards": [
+      {
+        "id": "who-patient-safety",
+        "name": "WHO Patient Safety Standards",
+        "version": "2025",
+        "organization": "World Health Organization",
+        "applicableSections": [
+          "Patient Identification",
+          "Medical History Recording",
+          "Consent Documentation"
+        ],
+        "source": "https://www.who.int/patient-safety"
+      },
+      {
+        "id": "kenya-health-policy",
+        "name": "Kenya Health Policy 2014-2030",
+        "organization": "Ministry of Health, Kenya",
+        "applicableSections": [
+          "Universal Health Coverage",
+          "Health Information Systems"
+        ]
+      }
+    ]
+  },
+  "form": {
+    "id": "kenya-health-intake-v1",
+    "title": "Patient Intake Form",
+    "titleLocal": "Fomu ya Kuingiza Mgonjwa",
+    "description": "This form collects essential information for patient registration and care delivery.",
+    "pages": [
+      {
+        "id": "page-1-consent",
+        "title": "Consent & Privacy Notice",
+        "titleLocal": "Idhini na Ilani ya Faragha",
+        "sections": [
+          {
+            "id": "consent-section",
+            "title": "Data Collection Consent",
+            "type": "consent",
+            "fields": [
+              {
+                "id": "consent-notice",
+                "type": "html",
+                "content": "<h3>Privacy Notice / Ilani ya Faragha</h3><p>We collect your personal and health information to provide medical care. Your data will be protected according to the Kenya Data Protection Act 2019.</p><p><strong>Your rights:</strong> Access your data, request corrections, withdraw consent (may affect care delivery).</p>",
+                "complianceRefs": ["kdpa-2019"]
+              },
+              {
+                "id": "consent-checkbox",
+                "type": "checkbox",
+                "label": "I consent to the collection and processing of my personal and health information for medical care purposes",
+                "labelLocal": "Ninakubali ukusanyaji na usindikaji wa taarifa zangu binafsi na za afya kwa madhumuni ya huduma za kimatibabu",
+                "required": true,
+                "validation": {
+                  "mustBeChecked": true,
+                  "errorMessage": "Consent is required to proceed with registration"
+                },
+                "complianceRefs": ["kdpa-2019"]
+              },
+              {
+                "id": "consent-date",
+                "type": "hidden",
+                "value": "{{current_date}}",
+                "complianceRefs": ["kdpa-2019"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "page-2-demographics",
+        "title": "Personal Information",
+        "titleLocal": "Taarifa Binafsi",
+        "sections": [
+          {
+            "id": "basic-info",
+            "title": "Basic Information",
+            "fields": [
+              {
+                "id": "patient-id",
+                "type": "text",
+                "label": "Patient ID (if existing)",
+                "labelLocal": "Nambari ya Mgonjwa",
+                "required": false,
+                "helpText": "Leave blank if this is your first visit",
+                "validation": {
+                  "pattern": "^[A-Z0-9]{6,12}$",
+                  "errorMessage": "Patient ID must be 6-12 characters"
+                }
+              },
+              {
+                "id": "first-name",
+                "type": "text",
+                "label": "First Name / Given Name",
+                "labelLocal": "Jina la Kwanza",
+                "required": true,
+                "validation": {
+                  "pattern": "^[A-Za-z\\s'-]{1,50}$",
+                  "errorMessage": "Please enter a valid first name",
+                  "minLength": 1,
+                  "maxLength": 50
+                },
+                "complianceRefs": ["who-patient-safety"]
+              },
+              {
+                "id": "family-name",
+                "type": "text",
+                "label": "Family Name / Surname",
+                "labelLocal": "Jina la Ukoo",
+                "required": true,
+                "validation": {
+                  "pattern": "^[A-Za-z\\s'-]{1,50}$",
+                  "errorMessage": "Please enter a valid family name",
+                  "minLength": 1,
+                  "maxLength": 50
+                },
+                "complianceRefs": ["who-patient-safety"]
+              },
+              {
+                "id": "dob",
+                "type": "date",
+                "label": "Date of Birth",
+                "labelLocal": "Tarehe ya Kuzaliwa",
+                "required": true,
+                "format": "DD/MM/YYYY",
+                "validation": {
+                  "minDate": "1900-01-01",
+                  "maxDate": "{{today}}",
+                  "errorMessage": "Please enter a valid date of birth"
+                },
+                "complianceRefs": ["who-patient-safety"]
+              },
+              {
+                "id": "age",
+                "type": "calculated",
+                "label": "Age",
+                "labelLocal": "Umri",
+                "calculation": "yearsBetween(field.dob, today)",
+                "displayOnly": true
+              },
+              {
+                "id": "sex",
+                "type": "radio",
+                "label": "Sex",
+                "labelLocal": "Jinsia",
+                "required": true,
+                "options": [
+                  {"value": "M", "label": "Male", "labelLocal": "Mwanaume"},
+                  {"value": "F", "label": "Female", "labelLocal": "Mwanamke"},
+                  {"value": "O", "label": "Other/Prefer not to say", "labelLocal": "Nyingine/Sipendi kusema"}
+                ],
+                "complianceRefs": ["who-patient-safety"]
+              }
+            ]
+          },
+          {
+            "id": "contact-info",
+            "title": "Contact Information",
+            "titleLocal": "Taarifa za Mawasiliano",
+            "fields": [
+              {
+                "id": "phone-primary",
+                "type": "tel",
+                "label": "Primary Phone Number",
+                "labelLocal": "Nambari ya Simu Kuu",
+                "required": true,
+                "placeholder": "0712345678",
+                "validation": {
+                  "pattern": "^(\\+254|0)[17]\\d{8}$",
+                  "errorMessage": "Please enter a valid Kenyan phone number (e.g., 0712345678)"
+                },
+                "helpText": "Format: 0712345678 or +254712345678"
+              },
+              {
+                "id": "phone-alternate",
+                "type": "tel",
+                "label": "Alternate Phone Number (Optional)",
+                "labelLocal": "Nambari Mbadala ya Simu",
+                "required": false,
+                "validation": {
+                  "pattern": "^(\\+254|0)[17]\\d{8}$",
+                  "errorMessage": "Please enter a valid Kenyan phone number"
+                }
+              },
+              {
+                "id": "email",
+                "type": "email",
+                "label": "Email Address (Optional)",
+                "labelLocal": "Anwani ya Barua Pepe",
+                "required": false,
+                "validation": {
+                  "pattern": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
+                  "errorMessage": "Please enter a valid email address"
+                }
+              }
+            ]
+          },
+          {
+            "id": "address-info",
+            "title": "Address",
+            "titleLocal": "Anwani",
+            "fields": [
+              {
+                "id": "county",
+                "type": "select",
+                "label": "County",
+                "labelLocal": "Kaunti",
+                "required": true,
+                "options": [
+                  {"value": "nairobi", "label": "Nairobi"},
+                  {"value": "mombasa", "label": "Mombasa"},
+                  {"value": "kisumu", "label": "Kisumu"},
+                  {"value": "nakuru", "label": "Nakuru"},
+                  {"value": "kiambu", "label": "Kiambu"},
+                  {"value": "other", "label": "Other"}
+                ],
+                "helpText": "Select your county of residence"
+              },
+              {
+                "id": "sub-county",
+                "type": "text",
+                "label": "Sub-County / Constituency",
+                "labelLocal": "Kaunti Ndogo",
+                "required": false,
+                "validation": {
+                  "maxLength": 100
+                }
+              },
+              {
+                "id": "town-village",
+                "type": "text",
+                "label": "Town / Village",
+                "labelLocal": "Mji / Kijiji",
+                "required": true,
+                "validation": {
+                  "maxLength": 100,
+                  "errorMessage": "Please enter your town or village"
+                }
+              },
+              {
+                "id": "street-address",
+                "type": "textarea",
+                "label": "Street Address / Directions",
+                "labelLocal": "Anwani ya Mtaa / Maelekezo",
+                "required": false,
+                "rows": 3,
+                "helpText": "Physical address or directions to locate you",
+                "validation": {
+                  "maxLength": 500
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "page-3-medical",
+        "title": "Medical Information",
+        "titleLocal": "Taarifa za Kimatibabu",
+        "sections": [
+          {
+            "id": "emergency-contact",
+            "title": "Emergency Contact",
+            "titleLocal": "Anwani ya Dharura",
+            "fields": [
+              {
+                "id": "emergency-name",
+                "type": "text",
+                "label": "Emergency Contact Name",
+                "labelLocal": "Jina la Mtu wa Kuwasiliana Wakati wa Dharura",
+                "required": true,
+                "validation": {
+                  "maxLength": 100
+                }
+              },
+              {
+                "id": "emergency-relationship",
+                "type": "text",
+                "label": "Relationship",
+                "labelLocal": "Uhusiano",
+                "required": true,
+                "placeholder": "e.g., Spouse, Parent, Sibling",
+                "validation": {
+                  "maxLength": 50
+                }
+              },
+              {
+                "id": "emergency-phone",
+                "type": "tel",
+                "label": "Emergency Contact Phone",
+                "labelLocal": "Simu ya Mtu wa Dharura",
+                "required": true,
+                "validation": {
+                  "pattern": "^(\\+254|0)[17]\\d{8}$",
+                  "errorMessage": "Please enter a valid phone number"
+                }
+              }
+            ]
+          },
+          {
+            "id": "medical-history",
+            "title": "Medical History",
+            "titleLocal": "Historia ya Kimatibabu",
+            "fields": [
+              {
+                "id": "chronic-conditions",
+                "type": "checkbox-group",
+                "label": "Do you have any of the following conditions?",
+                "labelLocal": "Je, una hali zozote zifuatazo?",
+                "required": false,
+                "options": [
+                  {"value": "diabetes", "label": "Diabetes / Kisukari"},
+                  {"value": "hypertension", "label": "High Blood Pressure / Presha ya Damu"},
+                  {"value": "asthma", "label": "Asthma / Pumu"},
+                  {"value": "hiv", "label": "HIV/AIDS", "sensitive": true},
+                  {"value": "tb", "label": "Tuberculosis / Kifua Kikuu"},
+                  {"value": "heart", "label": "Heart Disease / Ugonjwa wa Moyo"},
+                  {"value": "none", "label": "None / Hakuna", "exclusive": true}
+                ],
+                "complianceRefs": ["hiv-aids-prevention"]
+              },
+              {
+                "id": "allergies",
+                "type": "textarea",
+                "label": "Known Allergies (medications, food, etc.)",
+                "labelLocal": "Mzio Unaojulikana (dawa, chakula, n.k.)",
+                "required": false,
+                "rows": 3,
+                "placeholder": "List any known allergies or write 'None'",
+                "validation": {
+                  "maxLength": 500
+                },
+                "complianceRefs": ["who-patient-safety"]
+              },
+              {
+                "id": "current-medications",
+                "type": "textarea",
+                "label": "Current Medications",
+                "labelLocal": "Dawa Unazotumia Sasa",
+                "required": false,
+                "rows": 3,
+                "placeholder": "List medications you are currently taking or write 'None'",
+                "validation": {
+                  "maxLength": 500
+                }
+              }
+            ]
+          },
+          {
+            "id": "visit-reason",
+            "title": "Reason for Visit",
+            "titleLocal": "Sababu ya Ziara",
+            "fields": [
+              {
+                "id": "visit-type",
+                "type": "radio",
+                "label": "Type of Visit",
+                "labelLocal": "Aina ya Ziara",
+                "required": true,
+                "options": [
+                  {"value": "new-patient", "label": "New Patient Registration"},
+                  {"value": "routine-checkup", "label": "Routine Checkup"},
+                  {"value": "illness", "label": "Illness/Symptoms"},
+                  {"value": "follow-up", "label": "Follow-up Visit"},
+                  {"value": "emergency", "label": "Emergency"}
+                ]
+              },
+              {
+                "id": "chief-complaint",
+                "type": "textarea",
+                "label": "Main Concern / Symptoms",
+                "labelLocal": "Malalamiko Makuu / Dalili",
+                "required": true,
+                "rows": 4,
+                "placeholder": "Please describe your main health concern or reason for visit",
+                "validation": {
+                  "minLength": 10,
+                  "maxLength": 1000,
+                  "errorMessage": "Please provide a brief description of your concern"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "page-4-insurance",
+        "title": "Insurance & Payment",
+        "titleLocal": "Bima na Malipo",
+        "sections": [
+          {
+            "id": "insurance-info",
+            "title": "Health Insurance Information",
+            "titleLocal": "Taarifa za Bima ya Afya",
+            "fields": [
+              {
+                "id": "has-insurance",
+                "type": "radio",
+                "label": "Do you have health insurance?",
+                "labelLocal": "Je, una bima ya afya?",
+                "required": true,
+                "options": [
+                  {"value": "yes", "label": "Yes / Ndiyo"},
+                  {"value": "no", "label": "No / Hapana"}
+                ]
+              },
+              {
+                "id": "insurance-provider",
+                "type": "select",
+                "label": "Insurance Provider",
+                "labelLocal": "Mtoa Bima",
+                "required": false,
+                "conditionalDisplay": {
+                  "field": "has-insurance",
+                  "equals": "yes"
+                },
+                "options": [
+                  {"value": "nhif", "label": "NHIF (National Hospital Insurance Fund)"},
+                  {"value": "aaa", "label": "AAR Healthcare"},
+                  {"value": "britam", "label": "Britam"},
+                  {"value": "ciu", "label": "CIC Insurance"},
+                  {"value": "madison", "label": "Madison Insurance"},
+                  {"value": "jubilee", "label": "Jubilee Health Insurance"},
+                  {"value": "other", "label": "Other"}
+                ]
+              },
+              {
+                "id": "insurance-number",
+                "type": "text",
+                "label": "Insurance/NHIF Number",
+                "labelLocal": "Nambari ya Bima/NHIF",
+                "required": false,
+                "conditionalDisplay": {
+                  "field": "has-insurance",
+                  "equals": "yes"
+                },
+                "validation": {
+                  "pattern": "^[A-Z0-9]{6,20}$",
+                  "errorMessage": "Please enter a valid insurance number"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "page-5-summary",
+        "title": "Review & Submit",
+        "titleLocal": "Kagua na Wasilisha",
+        "sections": [
+          {
+            "id": "review-section",
+            "title": "Please Review Your Information",
+            "type": "review",
+            "fields": [
+              {
+                "id": "review-display",
+                "type": "html",
+                "content": "<p>Please review all information before submitting. You can go back to make changes if needed.</p>",
+                "contentLocal": "<p>Tafadhali kagua taarifa zote kabla ya kuwasilisha. Unaweza kurudi kubadilisha ikiwa ni lazima.</p>"
+              },
+              {
+                "id": "accuracy-confirmation",
+                "type": "checkbox",
+                "label": "I confirm that all information provided is accurate to the best of my knowledge",
+                "labelLocal": "Ninathibitisha kuwa taarifa zote nilizotoa ni sahihi kadri ninavyojua",
+                "required": true,
+                "validation": {
+                  "mustBeChecked": true,
+                  "errorMessage": "Please confirm the accuracy of your information"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "validation": {
+    "crossFieldRules": [
+      {
+        "id": "minor-consent",
+        "rule": "if age < 18, require guardian information",
+        "condition": {
+          "field": "age",
+          "operator": "<",
+          "value": 18
+        },
+        "action": {
+          "type": "require-field",
+          "targetField": "guardian-consent"
+        },
+        "errorMessage": "Guardian information is required for patients under 18 years old"
+      },
+      {
+        "id": "insurance-required-fields",
+        "rule": "if has-insurance = yes, require insurance-provider and insurance-number",
+        "condition": {
+          "field": "has-insurance",
+          "equals": "yes"
+        },
+        "action": {
+          "type": "require-fields",
+          "targetFields": ["insurance-provider", "insurance-number"]
+        }
+      }
+    ]
+  },
+  "dataHandling": {
+    "storage": {
+      "encryption": true,
+      "encryptionStandard": "AES-256",
+      "retentionPeriod": "7 years",
+      "retentionReason": "Medical record retention standard",
+      "complianceRefs": ["kdpa-2019", "kenya-health-policy"],
+      "backupFrequency": "daily",
+      "backupRetention": "30 days"
+    },
+    "transmission": {
+      "protocol": "https",
+      "tlsVersion": "1.3",
+      "endpoints": {
+        "primary": "https://api.healthclinic.example.ke/intake",
+        "backup": "https://backup.healthclinic.example.ke/intake"
+      },
+      "authentication": "required",
+      "complianceRefs": ["kdpa-2019"]
+    },
+    "access": {
+      "whoCanAccess": ["medical-staff", "administrators"],
+      "auditLogging": true,
+      "logRetention": "3 years",
+      "complianceRefs": ["kdpa-2019"]
+    },
+    "dataSubjectRights": {
+      "accessRequest": "Contact clinic administrator",
+      "correctionRequest": "Contact clinic administrator",
+      "deletionRequest": "Subject to legal retention requirements",
+      "complianceRefs": ["kdpa-2019"]
+    }
+  },
+  "uiConfiguration": {
+    "theme": {
+      "primaryColor": "#2E7D32",
+      "secondaryColor": "#1976D2",
+      "errorColor": "#D32F2F",
+      "successColor": "#388E3C"
+    },
+    "progressIndicator": true,
+    "allowSaveDraft": true,
+    "draftExpiration": "7 days",
+    "requiredFieldIndicator": "*",
+    "validationTiming": "onBlur"
+  },
+  "accessibility": {
+    "wcagLevel": "AA",
+    "screenReaderOptimized": true,
+    "keyboardNavigable": true,
+    "minimumFontSize": "14px",
+    "highContrastMode": "supported"
+  }
+}
