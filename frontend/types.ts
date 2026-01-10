@@ -94,3 +94,14 @@ export interface ClientRecord {
   metadata: Record<string, any>;
   submissions: Submission[];
 }
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: 'ADMIN' | 'SUPERVISOR' | 'WORKER';
+  domain_permissions: string[];
+  is_active: boolean;
+  last_login?: string;
+  created_at: string;
+}

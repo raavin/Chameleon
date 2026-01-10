@@ -2,8 +2,50 @@ import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import { Manifest } from "../types";
 import { DB } from "./dbService";
 
+// Load all research files
+const researchFiles = import.meta.glob('../research/*.txt', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+
 // Use process.env.API_KEY as per guidelines
 const getAIClient = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+function getResearchContext(domains: string[], onLog?: (msg: string) => void): string {
+  let context = "";
+  
+  // 1. Always include Master Executive Summary
+  const masterKey = Object.keys(researchFiles).find(k => k.toLowerCase().includes('masterexecutivesummary'));
+  if (masterKey) {
+    if (onLog) onLog(`\n[SCAN] Found Master Manifest: ${masterKey.split('/').pop()}`);
+    context += `\n\n## CORE PHILOSOPHICAL ALIGNMENT (THE MASTER MANIFEST)\n${researchFiles[masterKey]}\n`;
+  }
+
+  // 2. Include Domain-Specific Research
+  const loadedKeys = new Set([masterKey]); // Track what we've added to avoid dupes
+
+  domains.forEach(d => {
+    const domainLower = d.toLowerCase();
+    
+    Object.keys(researchFiles).forEach(path => {
+       if (loadedKeys.has(path)) return;
+       
+       const filename = path.split('/').pop()?.toLowerCase() || "";
+       const nameNoExt = filename.replace('.txt', '');
+       
+       // Robust matching: Check full strings OR partial word matches (e.g. "Family" matches "Families")
+       const domainParts = domainLower.split(/[\s-_]+/).filter(w => w.length > 3);
+       const isMatch = filename.includes(domainLower) || 
+                       domainLower.includes(nameNoExt) ||
+                       domainParts.some(part => nameNoExt.includes(part));
+
+       if (isMatch) {
+          if (onLog) onLog(`\n[SCAN] Integrating Domain Research: ${filename}`);
+          context += `\n\n## DOMAIN RESEARCH: ${filename}\n${researchFiles[path]}\n`;
+          loadedKeys.add(path);
+       }
+    });
+  });
+
+  return context;
+}
 
 function extractJSON(text: string): string {
   // 1. Try to find markdown code block (loose matching for json tag and whitespace)
@@ -46,6 +88,9 @@ export async function compileManifest(
   const PROGRAM_NAME = projectName || domains.join(' & ') + " Initiative";
   const SERVICE_TYPES = domains.join(', ');
 
+  // GET RESEARCH CONTEXT
+  const researchContext = getResearchContext(domains, onProgress);
+
   let prompt = '';
 
   if (existingManifest) {
@@ -55,6 +100,9 @@ export async function compileManifest(
 
 ## YOUR ROLE
 You are updating an EXISTING legislative manifest. Do not destroy existing data. You are merging NEW research into the existing JSON structure.
+
+## PHILOSOPHICAL & PROGRAMMATIC ALIGNMENT
+${researchContext}
 
 ## CURRENT MANIFEST (VERSION ${existingManifest.version})
 ${JSON.stringify(existingManifest).slice(0, 5000)} ... (truncated for context)
@@ -70,10 +118,26 @@ ${JSON.stringify(existingManifest).slice(0, 5000)} ... (truncated for context)
 4. Update 'compiled_at'.
 5. **IMPORTANT:** Save any key research text into the 'research_artifacts' -> 'cached_content' field so we can store it locally.
 
+## FIELD ENGINEERING: EXHAUSTIVE REQUIREMENT
+You must be EXHAUSTIVE in determining the data fields.
+- If a standard form has 40 questions, your manifest must have 40 fields.
+- Do not summarize or "simplify" complex forms.
+- Capture every boolean, date, string, and categorical option required by the legislation/standard.
+- **Goal:** The generated UI must be capable of replacing the official paper form entirely.
+- **Pagination:** If the form is long, break it into multiple sections. Do NOT arbitrarily limit the length. Generate as many fields as necessary.
+
 ## LOGGING & SAVING
 - [SEARCH] <Query>
 - [DOWNLOAD] Saving <filename> ... (When you find a document, add it to 'research_artifacts' with full text content in 'cached_content')
+- [ANALYSIS] <Thought Process> (Explain what you are looking for, what you found, and how you are mapping it. Be verbose.)
 - [MERGE] Integrating <new_field> into <section>
+
+## INSTRUCTIONS
+1. Start by searching for the official standards/acts.
+2. Log your analysis using [ANALYSIS] tags. e.g. "[ANALYSIS] Found 'Family Violence Protection Act 2008'. Extracting definition of 'Risk Assessment'."
+3. Log every decision about field inclusion. e.g. "[ANALYSIS] Adding 'Safety Plan' section due to Section 45 requirements."
+4. Perform the file downloads/savings.
+5. Generate the JSON.
 
 ## OUTPUT
 Return the FULLY MERGED JSON Manifest.
@@ -86,6 +150,9 @@ Return the FULLY MERGED JSON Manifest.
 ## YOUR ROLE
 You are a Legislative Research Agent. Conduct exhaustive deep research on a specific health/community program and compile ALL requirements.
 
+## PHILOSOPHICAL & PROGRAMMATIC ALIGNMENT
+${researchContext}
+
 ## INPUT PROVIDED
 - **Program Name:** ${PROGRAM_NAME}
 - **Location:** ${region}
@@ -97,6 +164,26 @@ You are a Legislative Research Agent. Conduct exhaustive deep research on a spec
 1. **Identification:** Official service models.
 2. **Framework Discovery:** Acts, Regulations, Standards.
 3. **Compliance Extraction:** Data fields, Reporting triggers.
+
+## FIELD ENGINEERING: EXHAUSTIVE REQUIREMENT
+You must be EXHAUSTIVE in determining the data fields.
+- If a standard form has 40 questions, your manifest must have 40 fields.
+- Do not summarize or "simplify" complex forms.
+- Capture every boolean, date, string, and categorical option required by the legislation/standard.
+- **Goal:** The generated UI must be capable of replacing the official paper form entirely.
+- **Pagination:** If the form is long, break it into multiple sections. Do NOT arbitrarily limit the length. Generate as many fields as necessary (aim for 10+ pages of form content if applicable).
+
+## LOGGING & VISIBILITY
+You must "Think Out Loud" so the user sees your process. Use the following log tags:
+
+- [SEARCH] <Query>
+- [DOWNLOAD] Saving <filename> ...
+- [ANALYSIS] <Thought Process>
+
+**Required Analysis Logs:**
+- Log the specific Acts/Standards you have identified.
+- Log the structure of the forms you are finding (e.g. "[ANALYSIS] Found WHO Intake Form V2. It has 4 sections: Patient ID, Triage, Clinical History, Outcome.")
+- Log your decision process for specific complex fields (e.g. "[ANALYSIS] Section 12 requires a calculated 'Risk Score'. Adding a computed field.")
 
 ## IMPORTANT: FILE PERSISTENCE & FULL TEXT EXTRACTION
 
@@ -172,6 +259,7 @@ For every relevant document (Act, Regulation, Standard) you find, you MUST:
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],
+        maxOutputTokens: 65000, // Attempt to force higher output limit for exhaustive manifests
       }
     }, 3, 5000, (activeModel) => {
         if (onProgress) onProgress(`\n[SYSTEM] Active Neural Node: ${activeModel}\n`);
@@ -199,8 +287,11 @@ For every relevant document (Act, Regulation, Standard) you find, you MUST:
       }
 
       if (calls.length > 0) {
-         textChunk = `\n[SEARCH] Performing research via Google (${calls.length} queries)...
-`;
+         const queries = calls.map((call: any) => {
+            const args = call.args || {};
+            return args.query || "Unknown Query";
+         }).join('", "');
+         textChunk = `\n[SEARCH] Performing research via Google: "${queries}"...\n`;
       }
       
       // 3. Text Extraction

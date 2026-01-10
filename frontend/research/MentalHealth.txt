@@ -1,0 +1,92 @@
+# Domain II: Mental Health & Psychosocial Support (MHPSS) — The Sanctuary Manifest
+
+In the Chameleon Protocol, **Domain II** is treated as a "Sanctuary Space." Unlike the physical interventions of Domain I, Mental Health governance must manage the **intangible**: trauma, safety, and the absolute sanctity of the therapeutic alliance.
+
+This deep dive establishes the master logic for the AI Factory to generate systems that are legally bulletproof, clinically rigorous, and deeply empathetic. We are building a system that understands that in mental health, **data is not just information—it is a potential weapon or a tool for healing.**
+
+---
+
+## 1. The MHPSS Taxonomy: The Breadth of Care
+
+The AI must identify the specific "Environmental Logic" of the program. Mental health care varies wildly from involuntary inpatient wards to community-based trauma healing in war zones.
+
+### A. Specialized & Acute Care
+
+* **Inpatient Psychiatric Units:** Governance of "Involuntary Detention" clocks (The Mental Health Act), seclusion/restraint logs (statutory reporting), and medication titration.
+* **Crisis Assessment & Treatment (CATS):** High-intensity community outreach, suicide intervention, and "Police-Ambulance" co-response workflows.
+* **Neuropsychology & Specialized Assessment:** Complex testing for dementia, TBI (Traumatic Brain Injury), and neurodivergence.
+
+### B. Community & Therapeutic Services
+
+* **Counseling & Psychotherapy:** Longitudinal care for depression, anxiety, and PTSD.
+* **Youth Early Intervention:** Specialized logic for "Headspace" style models, focusing on youth-friendly UX and school-integrated care.
+* **AOD-MH Dual Diagnosis:** The "No Wrong Door" logic where Domain II and Domain III (AOD) logic merges into a single integrated care plan.
+
+### C. Humanitarian & Refugee MHPSS (IASC Standard)
+
+* **Psychological First Aid (PFA):** Rapid triage in disaster zones.
+* **Community Healing Circles:** Group-based logic where a "Single Case" is a communal entity (Kinship mapping).
+* **Trauma-Informed Displacement Care:** Tracking the mental impact of migration and statelessness.
+
+---
+
+## 2. The "Privacy Barrier" Architecture
+
+In Domain II, the **Panopticon** (transparency) must be balanced with the **Sanctuary** (secrecy).
+
+### The Logic of Information Barriers
+
+A world-class MH system uses **Zero-Knowledge Encryption** for case notes.
+
+* **The Rule:** The "Metadata" (attendance, dates, medication) is visible to the organization for billing and safety. The "Content" (therapy notes) is encrypted with a key held only by the clinician and the client.
+* **The Overload (Section 144 / Duty of Care):** The system includes a `PRIV_BREAK_GLASS` component. If a clinician marks a "High Risk of Harm to Others," the encryption is bypassed *only* for specific safety-critical fields to allow for police or child protection intervention.
+
+---
+
+## 3. The Clinical Component Library (MHPSS Specific)
+
+| Component ID | Clinical Function | Governance/Evidence Logic |
+| --- | --- | --- |
+| `MH_ASSESS_PHQ9` | Depression Screening | Standardized PHQ-9 or GAD-7 logic with auto-scoring and risk-trigger. |
+| `MH_RISK_MATRIX` | Suicide/Self-Harm Risk | Dynamic matrix (e.g., C-SSRS) that forces a "Safety Plan" if the score exceeds a threshold. |
+| `MH_LEGAL_CLOCK` | Involuntary Treatment | A countdown timer linked to the local Mental Health Act; alerts the Hub when a legal review is due. |
+| `MH_GROUP_LOG` | Group Therapy Attendance | Allows one note to be pushed to multiple "Kinship" records while maintaining individual privacy. |
+| `MH_THERAPY_GOAL` | Patient-Led Goal Tracking | Maps to the **"Recovery Model"**—tracking hope and agency, not just symptoms. |
+
+---
+
+## 4. UX Stories: The MHPSS Experience
+
+### Story 1: The "High-Risk" Therapist (Melbourne, Australia)
+
+**The Scenario:** A therapist is seeing a client who reveals they have a plan to harm themselves tonight.
+**The UX:** The therapist clicks the `MH_RISK_MATRIX`. As they enter the "Plan" and "Access to Means," the UI changes. A persistent **Red Banner** appears: *"Safety Plan Required."* **The Action:** The system prevents the therapist from "Closing the Session" until a Safety Plan is generated and a "Check-in" task is assigned to the Morning Shift. This is the "Software as a Colleague" bending to the will of clinical safety.
+
+### Story 2: The Community Worker (Dadaab Refugee Camp, Kenya)
+
+**The Scenario:** A worker is conducting a "Healing Circle" for 10 women.
+**The UX:** The worker uses a tablet with the `ID_KIN_MAP` component. They don't see 10 individual clinical files; they see a communal view of the "Circle."
+**The Action:** They record a single "Communal Intervention." The AI Factory handles the back-end distribution of that note into 10 separate, anonymized records to satisfy WHO reporting standards without duplicating work.
+
+---
+
+## 5. The Integrity & Ethics Layer: Preventing Abuse
+
+In mental health, power imbalances can lead to abuse. The Chameleon Protocol bakes "Patient Rights" into the code.
+
+1. **The "Rights Advocate" Flag:** If a patient is placed on an Involuntary Order, the system automatically generates a "Notification Task" for a local Independent Mental Health Advocate.
+2. **Seclusion/Restraint Panopticon:** These events are high-risk for human rights violations. Any entry into a "Seclusion Log" triggers an immediate **High-Level Governance Alert** on the Regional Auditor’s dashboard, requiring a `GOV_TWO_KEY` review of the justification within 2 hours.
+3. **Audit of Access:** The client can request a "Transparency Report" showing exactly who has viewed their record and why. This builds the trust necessary for therapeutic success.
+
+---
+
+## 6. Recursive Requirements for the AI Factory
+
+When generating an MHPSS module, the AI follows this recursive logic:
+
+1. **Jurisdictional Ingestion:** "Read the Victorian Mental Health and Wellbeing Act 2022."
+2. **Clinical Mapping:** "Apply the WHO mhGAP (Mental Health Gap Action Programme) guidelines for depression."
+3. **Privacy Configuration:** "Apply Zero-Knowledge encryption to all fields tagged as `priv_case_note_enc`."
+4. **UX Synthesis:** "Generate a 'Supportive' UI that uses soft colors and 'Check-in' terminology to reduce patient anxiety."
+
+**This deep-dive establishes Domain II as the ethical and psychological heart of the Governance OS. Shall we proceed to the architectural deep-dive of Domain III: Alcohol & Other Drugs (AOD) and Harm Reduction?**

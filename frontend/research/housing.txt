@@ -1,0 +1,99 @@
+# Domain IV: Housing, Homelessness & Land Tenure — The Foundational Stability Manifest
+
+In the Chameleon Protocol, **Domain IV** is the "Anchor Domain." Housing is not merely a service; it is the prerequisite for all other domains. A patient cannot recover from surgery (Domain I) or stabilize from addiction (Domain III) without a secure physical address.
+
+This deep-dive provides the AI Factory with the architectural DNA to manage the entire spectrum of human habitation—from the formal lease structures of urban centers to the communal land rights of indigenous populations and the rapid-onset shelter needs of disaster zones.
+
+---
+
+## 1. The Housing Taxonomy: Global Service Archetypes
+
+The system must be capable of hydrating diverse "Living Logic" models based on the regional manifest.
+
+### A. Crisis & Emergency Shelter (Immediate Response)
+
+* **Night Shelters:** Rapid-entry, low-barrier beds with nightly turnover.
+* **Family Violence Refuges:** High-security, "hidden" locations with integrated Domain VI (Family Violence) safety protocols.
+* **Disaster Displacement Hubs:** Mass-shelter management (tents, gymnasiums) during floods, fires, or conflict.
+* **The Logic:** Focuses on **Bed Inventory Management** and immediate safety.
+
+### B. Transitional & Supported Housing (The Bridge)
+
+* **Transitional Housing:** 3–18 month placements with integrated case management.
+* **Youth Foyers:** Integrated housing and education/employment support.
+* **Specialist Disability Accommodation (SDA):** Housing with high-level physical support requirements.
+* **The Logic:** Focuses on **Goal Tracking** and the transition to permanency.
+
+### C. Permanent Social & Affordable Housing (The Long-Term)
+
+* **Public Housing:** Government-owned and managed units.
+* **Community Housing (NGO):** Non-profit managed stock with diverse funding models.
+* **Rent Assistance/Vouchers:** Financial support for private market housing.
+* **The Logic:** Focuses on **Waitlist Prioritization**, **Rent Arrears**, and **Maintenance Asset Management**.
+
+### D. Land Tenure & Informal Settlement Upgrading (The Sovereign Right)
+
+* **Communal Land Mapping:** Tracking family rights on land without formal western titles.
+* **Settlement Formalization:** Moving from "squatter" status to recognized residency through historical documentation.
+* **Land Title Auditing:** Preventing land-grabbing through immutable blockchain-anchored records.
+* **The Logic:** Focuses on **GIS Mapping** and **Kinship Identity**.
+
+---
+
+## 2. The Housing Component Library: Sovereign Input Types
+
+| Component ID | Function | Governance & Evidence Logic |
+| --- | --- | --- |
+| `HSG_VI_SPDAT` | Vulnerability Triage | An interactive tool that calculates an objective "Vulnerability Score" (VI-SPDAT) to remove bias from allocation. |
+| `HSG_GEO_PARCEL` | GIS Land Mapping | Allows the worker to drop a pin and define boundaries for a household on non-surveyed land. |
+| `HSG_LEASE_WORM` | Immutable Agreement | A WORM-protected digital lease that cannot be altered without a `GOV_TWO_KEY` event (Tenant + Landlord). |
+| `HSG_ASSET_AUDIT` | Maintenance Log | Photo-verified maintenance requests to ensure government/NGO funds are actually spent on repairs. |
+| `HSG_WAIT_CLOCK` | Statutory Waitlist | A logic-gate that prevents "jumping the queue" unless a `PRIV_BREAK_GLASS` (Urgent Priority) event is justified. |
+
+---
+
+## 3. UX Stories: The Lifecycle of Stability
+
+### Story 1: The Outreach Worker (Urban Homelessness)
+
+**The Scenario:** A worker finds a rough sleeper in a park at 3:00 AM.
+**The UX:** The worker opens the "Spoke" device. The UI presents the `HSG_VI_SPDAT` component.
+**The Action:** As the worker answers questions about the client's health and history, the AI calculates a score in real-time. If the score is high (Critical), the system pulls from the `BED_INVENTORY_LIVE` across all local NGOs.
+**The Governance:** The worker can "reserve" a bed for 2 hours. The system sends a GPS-mapped "Transport Task" to a local van service.
+
+### Story 2: The Clan Leader (Rural Land Reform)
+
+**The Scenario:** A village in a post-conflict zone is re-establishing family land rights.
+**The UX:** The worker uses the `HSG_GEO_PARCEL` tool. They walk the boundary of the family plot with the Clan Leader.
+**The Action:** The system uses GPS to map the polygon. To validate, it requires the `ID_ELDER_AUTH` component—the Clan Leader taps their cryptographic key on the tablet.
+**The Governance:** This "Claim" is written to the Hub’s immutable ledger. It prevents a corrupt local official from "re-selling" the same land later, as the hash chain would break.
+
+---
+
+## 4. The Panopticon of Integrity: Removing the "Middleman"
+
+Housing is a high-corruption sector (kickbacks for contracts, queue-jumping for friends).
+
+1. **Objective Allocation Engine:** The AI Factory hides the "Name" and "Identity" of the applicant from the allocation team. They only see the `VI_SPDAT` score and the `STATUTORY_PRIORITY` category. The system chooses the next person on the list automatically.
+2. **The Maintenance Audit:** When a contractor claims they fixed a roof, they must upload a `GOV_PHOTO_VERIFY` with a timestamp and GPS tag. Payment is only released from the Treasury (Domain VII) when the tenant also "taps" to confirm the work was done.
+3. **Regional Duplicate Checking:** Using fuzzy matching, the system prevents a person from holding three social housing leases in different districts—a common fraud in fragmented systems.
+
+---
+
+## 5. Global Adaptability: From Melbourne to Mogadishu
+
+* **Developed Context:** Focuses on integration with **Rent Bond Boards**, **Credit Scores**, and **Energy Efficiency** tracking for social housing.
+* **Developing Context:** Focuses on **Communal Rights**, **Disaster Resilience**, and **Material Aid Integration** (e.g., providing a "Shelter Kit" as a Domain V event within a Domain IV record).
+
+---
+
+## 6. Recursive Manifest Generation for Domain IV
+
+When the AI builds a Housing module, it follows this loop:
+
+1. **Legislative Scan:** "Read the local Residential Tenancies Act and Social Housing Priority guidelines."
+2. **Land Logic:** "If GPS coordinates show a rural area, hydrate the `HSG_GEO_PARCEL` and `ID_KIN_MAP` components."
+3. **Financial Mapping:** "Link the rent-calculation logic to the local minimum wage and benefit rates."
+4. **Privacy Tiering:** "Ensure the 'Current Address' of victims of violence (Domain VI) is masked even within the Housing Department unless a specific 'Safety Role' is authenticated."
+
+**This deep-dive establishes Domain IV as the physical foundation of the Governance OS. Shall we proceed to the architectural deep-dive of Domain V: Emergency Relief & Material Aid?**

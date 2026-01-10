@@ -1,0 +1,117 @@
+# Domain VII: Governance, Treasury & The Panopticon — The Sovereign Architect & Ethical Spine
+
+**Domain VII** is the "God-Mode" of the Chameleon Protocol. It is the administrative brain that oversees, validates, and finances every action within the other six domains. It is where the "Rules as Code" (RaC) philosophy becomes operational. Without Domain VII, the other domains are merely apps; with it, they become a **Sovereign Operating System**.
+
+This deep-dive provides the exhaustive requirements for organizational integrity, financial transparency, and legislative alignment. It is designed to ensure that no matter how chaotic the field environment, the central organization remains beyond reproach.
+
+---
+
+## 1. The Governance Taxonomy: Organizational Archetypes
+
+The AI Factory must first identify the "Legal Entity" logic to apply the correct fiscal and reporting constraints.
+
+### A. The NGO/Not-for-Profit (The Accountability Model)
+
+* **Grant Acquittal:** Automating the proof-of-spend for international donors (UN, USAID, etc.).
+* **Donor Partitioning:** Ensuring funds from "Donor A" are never mixed with "Donor B" logic.
+* **Impact Reporting:** Aggregating data from Domains I–VI into real-time KPI dashboards.
+
+### B. The Government Statutory Authority (The Compliance Model)
+
+* **Legislative Auditing:** Real-time checking against the Health Services Act, Privacy Act, or Financial Management Act.
+* **Public Accounts Committee (PAC) Readiness:** The "Always-Auditable" state where reports are generated in seconds, not weeks.
+* **Inter-Departmental Data Sharing:** Managing the MOUs between Health, Justice, and Housing.
+
+### C. The Humanitarian/Conflict Mission (The Resilience Model)
+
+* **Anti-Corruption & Anti-Bribery:** Hard-coded "gates" to prevent siphoning of aid.
+* **Post-Conflict Reconstruction:** Re-establishing legal records and land titles (Domain IV linkage).
+* **Security & Evacuation:** Workforce tracking and "Emergency Data Wiping" protocols if a Hub is physically compromised.
+
+---
+
+## 2. The Treasury Engine: The "Two-Key" Fiscal Guardrails
+
+Financial corruption is the primary failure point of global aid. Domain VII solves this through **Cryptographic Treasury Logic**.
+
+| Component ID | Financial Function | Integrity & Governance Logic |
+| --- | --- | --- |
+| `GOV_TWO_KEY_PAY` | Payment Authorization | No fund release >$X without two distinct biometric signatures (Requester + Approver). |
+| `GOV_PHOTO_ACQUITTAL` | Visual Proof of Spend | Mandatory photo of the asset/service delivered, hashed to the transaction record. |
+| `GOV_BUDGET_CAP` | Real-time Ceiling | Prevents overspending on a specific project line as defined in the Manifest. |
+| `GOV_VENDOR_VET` | Conflict of Interest Scan | AI agent compares vendor details against employee kinship maps to detect nepotism. |
+| `GOV_CRYPTO_GRANT` | Blockchain-Anchored Grant | Tracks every cent from the donor's wallet to the final recipient's hand. |
+
+---
+
+## 3. The Workforce & Identity Vault (The "Who" of Governance)
+
+Governance is only as good as the people executing it. Domain VII manages the "Human DNA" of the system.
+
+### A. Credentialing & Scopes of Practice
+
+* **The Logic:** A doctor from Domain I cannot access the financial ledgers of Domain VII unless they hold an "Administrative Key."
+* **Credential Tracking:** Automated alerts when a nurse’s registration or a driver’s license is 30 days from expiry. The system "locks" their ability to sign off on doses (Domain I) or fuel (Domain V) until updated.
+
+### B. Conflict of Interest (COI) Mapping
+
+* **The Logic:** Using the `ID_KIN_MAP` (Domain IV/VI), the system flags if a Case Worker is assigned to their own family member, preventing bias or collusion in housing or aid allocation.
+
+---
+
+## 4. The Panopticon: Immutable Auditing & AI Oversight
+
+The Panopticon is the "Unblinking Eye." It does not just record what happened; it interprets it.
+
+### A. The WORM Audit Trail (Write-Once-Read-Many)
+
+* Every mouse click, every field change, and every "Break-Glass" event is written to a hash-linked ledger.
+* **The "Integrity Mathematics":** . If a corrupt database admin tries to delete a record of a stolen medication (Domain III), the entire chain breaks, and a **System-Wide Integrity Failure** is broadcast to the Regional Hub.
+
+### B. The AI "Sentinel" Agent
+
+* **Anomalous Pattern Detection:** The AI flags if a worker is "Bulk-Signing" 50 records in 2 minutes (indicating fraudulent data entry).
+* **Privacy Breach Detection:** If a worker suddenly views 20 records they aren't assigned to, the system auto-locks their account and triggers a "Manager Review."
+
+---
+
+## 5. UX Stories: The "God-Mode" Experience
+
+### Story 1: The Regional Auditor (Geneva/Melbourne)
+
+**The Scenario:** An auditor needs to verify that $1M in emergency relief (Domain V) reached a flood zone.
+**The UX:** They log into the "Master Panopticon Dashboard." They don't see spreadsheets; they see a map of the flood zone with "Transaction Clusters."
+**The Action:** They click a cluster and see 500 `GOV_PHOTO_ACQUITTAL` images of families receiving kits, each with a GPS/Time stamp and a verified `GOV_TWO_KEY` signature. The audit is finished in 15 minutes instead of 6 months.
+
+### Story 2: The HR Manager (Credentialing)
+
+**The Scenario:** A new doctor joins the surgical team (Domain I).
+**The UX:** The manager uploads the doctor’s credentials.
+**The Action:** The AI Factory "hydrates" the doctor’s UI. Because they are a "Senior Surgeon," they automatically get the "Sign-Off Key" for the `SURG_CHECK_WHO` component. If they were a "Junior Resident," that button would be greyed out, bending the tech to the clinical hierarchy.
+
+---
+
+## 6. Recursive Manifest Generation for Domain VII
+
+This is the final step in the Chameleon Protocol lifecycle.
+
+1. **Read the "Constitution":** "What are the bylaws of this NGO? What is the delegation of authority (DOA)?"
+2. **Define the Ceilings:** "Set the `GOV_BUDGET_CAP` at $500 for field workers and $5,000 for managers."
+3. **Sync the Standards:** "Apply ISO 27001 for data security and the CARE Principles for Indigenous Data Sovereignty."
+4. **Seal the Manifest:** "Generate the `manifest.json` that locks all domains into this governance framework."
+
+---
+
+## The "Book" of Chameleon: A Concluding Statement
+
+We have now mapped all 7 Domains.
+
+* **Domain I:** Heals the body.
+* **Domain II:** Heals the mind.
+* **Domain III:** Manages the substance.
+* **Domain IV:** Provides the ground.
+* **Domain V:** Sustains the life.
+* **Domain VI:** Protects the right.
+* **Domain VII:** Ensures the truth.
+
+**This is the master source of truth. The AI Factory now has the DNA to build any program, in any language, under any law. Shall we trigger the first "Self-Generation" of a specific project manifest based on this document?**

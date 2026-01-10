@@ -1,6 +1,8 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Manifest } from '../types';
+import { DB } from '../services/dbService';
+import { useAuth } from '../contexts/AuthContext';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -19,6 +21,35 @@ const Layout: React.FC<LayoutProps> = ({
   children, viewMode, setViewMode, manifests, activeManifestId, 
   setActiveManifestId, activeDomainId, setActiveDomainId, selectedClientId, onReset 
 }) => {
+  const { user, logout, isAuthenticated } = useAuth();
+  const [isOnline, setIsOnline] = useState(true);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+
+  // Check online status and pending sync count periodically
+  useEffect(() => {
+    const checkStatus = async () => {
+      const online = await DB.isOnline();
+      setIsOnline(online);
+      const pending = await DB.getPendingSyncCount();
+      setPendingCount(pending);
+
+      // Auto-sync if online and have pending items
+      if (online && pending > 0 && !syncing) {
+        setSyncing(true);
+        const result = await DB.syncPendingToServer();
+        if (result.synced > 0) {
+          setPendingCount(await DB.getPendingSyncCount());
+        }
+        setSyncing(false);
+      }
+    };
+
+    checkStatus();
+    const interval = setInterval(checkStatus, 30000); // Check every 30 seconds
+    return () => clearInterval(interval);
+  }, [syncing]);
+
   return (
     <div className="flex h-screen bg-slate-50 text-slate-900 font-sans">
       {/* Sidebar */}
@@ -94,11 +125,21 @@ const Layout: React.FC<LayoutProps> = ({
           </section>
         </nav>
 
-        <div className="p-8 border-t border-slate-100 bg-slate-50/50">
+        <div className="p-8 border-t border-slate-100 bg-slate-50/50 space-y-2">
           <div className="flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Regional Node: CONNECTED</span>
+            <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></div>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              {isOnline ? 'Server: Connected' : 'Server: Offline (Local Mode)'}
+            </span>
           </div>
+          {pendingCount > 0 && (
+            <div className="flex items-center gap-3">
+              <div className={`w-2 h-2 rounded-full ${syncing ? 'bg-blue-500 animate-pulse' : 'bg-amber-500'}`}></div>
+              <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest">
+                {syncing ? 'Syncing...' : `${pendingCount} item${pendingCount > 1 ? 's' : ''} pending sync`}
+              </span>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -123,7 +164,23 @@ const Layout: React.FC<LayoutProps> = ({
              <div className="flex -space-x-2">
                 {[1, 2, 3].map(i => <div key={i} className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-slate-400">{i}</div>)}
              </div>
-             <button className="w-10 h-10 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-xs shadow-lg">JD</button>
+             {isAuthenticated && user ? (
+               <div className="flex items-center gap-3">
+                 <div className="text-right">
+                   <p className="text-xs font-bold text-slate-700">{user.name}</p>
+                   <p className="text-[10px] text-slate-400 uppercase">{user.role}</p>
+                 </div>
+                 <button 
+                   onClick={logout}
+                   className="w-10 h-10 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-xs shadow-lg hover:bg-slate-700 transition-colors"
+                   title="Logout"
+                 >
+                   {user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                 </button>
+               </div>
+             ) : (
+               <button className="w-10 h-10 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-xs shadow-lg">?</button>
+             )}
           </div>
         </header>
 
