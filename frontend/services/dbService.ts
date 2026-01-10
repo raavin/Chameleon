@@ -174,17 +174,42 @@ export const DB = {
    * Save manifest - saves to both server and local
    */
   async saveManifest(manifest: Manifest) {
+    console.log('[DB] saveManifest called with:', manifest?.id, manifest);
+    
+    // Skip if manifest is not a proper object
+    if (!manifest || typeof manifest !== 'object') {
+      console.error('[DB] Skipping invalid manifest - not an object:', manifest);
+      return;
+    }
+    
+    // Ensure manifest has an id
+    if (!manifest.id) {
+      (manifest as any).id = `manifest_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      console.log('[DB] Generated manifest ID:', manifest.id);
+    }
+    
     // Always save locally first (for offline support)
-    await IDB.put('manifests', manifest);
+    try {
+      console.log('[DB] Saving to IndexedDB...');
+      await IDB.put('manifests', manifest);
+      console.log('[DB] IndexedDB save successful');
+    } catch (idbErr) {
+      console.error('[DB] IndexedDB save FAILED:', idbErr);
+      throw idbErr;
+    }
     
     try {
-      if (await isServerAvailable()) {
-        await manifestApi.save(manifest);
+      const serverUp = await isServerAvailable();
+      console.log('[DB] Server available:', serverUp);
+      if (serverUp) {
+        console.log('[DB] Saving to server...');
+        const result = await manifestApi.save(manifest);
+        console.log('[DB] Server save successful:', result);
       } else {
-        console.warn('Server unavailable, manifest saved locally only');
+        console.warn('[DB] Server unavailable, manifest saved locally only');
       }
     } catch (err) {
-      console.warn('Failed to save manifest to server:', err);
+      console.error('[DB] Failed to save manifest to server:', err);
     }
   },
 
@@ -322,9 +347,21 @@ export const DB = {
   },
 
   /**
+  /**
    * Save research artifact
    */
   async saveResearchArtifact(artifact: ResearchNode) {
+    // Skip if artifact is not a proper object with an id
+    if (!artifact || typeof artifact !== 'object') {
+      console.warn('Skipping invalid artifact:', artifact);
+      return;
+    }
+    
+    // Ensure artifact has an id
+    if (!artifact.id) {
+      artifact.id = `artifact_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    }
+    
     await IDB.put('research_artifacts', artifact);
     
     try {

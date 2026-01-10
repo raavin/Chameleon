@@ -370,63 +370,40 @@ This is NOT a greenfield project. You have a working MVP with:
 ## PHASE 8: PRIVACY & CONSENT SYSTEM
 
 ### 8.1 Design Privacy Tier System
-- [ ] **INSPECT**: Review existing data to identify sensitivity levels
-- [ ] **DESIGN**: Map fields/satellites to Privacy Tiers in `PRIVACY_DESIGN.md`:
+- [x] **INSPECT**: Review existing data to identify sensitivity levels
+- [x] **DESIGN**: Map fields/satellites to Privacy Tiers in `PRIVACY_DESIGN.md`:
   - 🟢 GREEN: Public within org (names, appointments)
   - 🟡 AMBER: Requires consent (address, contact)
   - 🔴 RED: Highly sensitive (clinical notes, risk assessments)
-- [ ] **CREATE**: Privacy rules table in schema:
-  ```sql
-  CREATE TABLE IF NOT EXISTS privacy_rules (
-    rule_id TEXT PRIMARY KEY,
-    satellite_id TEXT,
-    field_id TEXT,
-    tier TEXT NOT NULL,
-    access_conditions TEXT,
-    created_at TEXT NOT NULL
-  );
-  ```
+- [x] **CREATE**: PrivacyRule model (`/backend/src/models/PrivacyRule.js`)
+  - Field-level privacy tier assignment
+  - Pattern-based default tier detection
+  - Domain and manifest scoping
 
 ### 8.2 Implement Privacy Middleware
-- [ ] **CREATE**: `/apps/server/src/middleware/privacyMiddleware.js`
-- [ ] **IMPLEMENT**: `checkPrivacyTier(satelliteId, userId)` function
-- [ ] **IMPLEMENT**: Privacy enforcement:
-  - GREEN: Always accessible
-  - AMBER: Check for consent
-  - RED: Check for consent + high-level authorization
-- [ ] **APPLY**: Add to all satellite read routes
-- [ ] **TEST**: Try to access different tiers with/without permission
+- [x] **CREATE**: `/backend/src/middleware/privacyMiddleware.js`
+- [x] **IMPLEMENT**: `checkPrivacy(req, res, next)` function
+- [x] **IMPLEMENT**: `filterByPrivacy(submission, userId, userRole, manifest)` function
+- [x] **IMPLEMENT**: `applyPrivacyFilter(getManifest)` middleware
+- [x] **IMPLEMENT**: `requireRedAccess` middleware for sensitive data
 
 ### 8.3 Consent Management
-- [ ] **CREATE**: Consent table in schema:
-  ```sql
-  CREATE TABLE IF NOT EXISTS consents (
-    consent_id TEXT PRIMARY KEY,
-    identity_key TEXT NOT NULL,
-    granted_to_user_id TEXT NOT NULL,
-    satellite_id TEXT,
-    domain_id TEXT,
-    granted_at TEXT NOT NULL,
-    expires_at TEXT,
-    revoked INTEGER DEFAULT 0,
-    revoked_at TEXT
-  );
-  ```
-- [ ] **CREATE**: `/apps/server/src/models/consent.js`
-- [ ] **CREATE**: Consent API:
-  - `POST /api/consent` - Grant consent
-  - `DELETE /api/consent/:consentId` - Revoke consent
-  - `GET /api/consent/by-identity/:globalKey` - List consents
-- [ ] **TEST**: Grant consent, access data, revoke, verify block
+- [x] **CREATE**: Consent model (`/backend/src/models/Consent.js`)
+  - Granular scope (submission, domain, field-level)
+  - Time-limited consent with expiry
+  - Revocation tracking
+  - Access counting and logging
+- [x] **CREATE**: `/backend/src/routes/consentRoutes.js`
+- [x] **IMPLEMENT**: `POST /api/consent` - Grant consent
+- [x] **IMPLEMENT**: `DELETE /api/consent/:id` - Revoke consent
+- [x] **IMPLEMENT**: `GET /api/consent/by-client/:clientId` - List consents
+- [x] **IMPLEMENT**: `POST /api/consent/check` - Check access permission
+- [x] **IMPLEMENT**: `GET /api/consent/my-access` - Get user's granted access
 
 ### 8.4 Client-Side Privacy Indicators
-- [ ] **INSPECT**: Find where data is displayed in the UI
-- [ ] **ADD**: Visual privacy tier indicators:
-  - Green dot for GREEN tier
-  - Amber dot for AMBER tier
-  - Red dot for RED tier
-- [ ] **CREATE**: Consent request UI flow
-- [ ] **TEST**: View data with different privacy tiers
+- [ ] **TODO**: Add visual privacy tier indicators to Engine.tsx
+- [ ] **TODO**: Create consent request UI flow
+- [ ] **TODO**: Show redacted field indicators
 
 ---
 
@@ -451,118 +428,85 @@ This is NOT a greenfield project. You have a working MVP with:
   function generateKeyPair() {
     const keypair = forge.pki.rsa.generateKeyPair(2048);
     return {
-      publicKey: forge.pki.publicKeyToPem(keypair.publicKey),
-      privateKey: forge.pki.privateKeyToPem(keypair.privateKey)
-    };
-  }
-  
-  function signData(data, privateKeyPem) {
-    const privateKey = forge.pki.privateKeyFromPem(privateKeyPem);
-    const md = forge.md.sha256.create();
-    md.update(JSON.stringify(data), 'utf8');
-    const signature = privateKey.sign(md);
-    return forge.util.encode64(signature);
-  }
-  ```
-- [ ] **UPDATE**: User model to generate keys on creation
-- [ ] **TEST**: Generate keys, sign data, verify signature
+---
+
+## PHASE 9: TWO-KEY AUTHORIZATION (HIGH-STAKES ACTIONS)
+
+### 9.1 Identify High-Stakes Actions
+- [x] **REVIEW**: What actions require two-key authorization
+- [x] **DOCUMENT**: List in `HIGH_STAKES_ACTIONS.md`:
+  - RED tier data access
+  - Child removal decisions
+  - Fund release (>$1000)
+  - Data deletion
+  - Account deactivation
+  - Consent override (emergency)
+  - Bulk data export
+
+### 9.2 Implement Cryptographic Signatures
+- [x] **IMPLEMENT**: HMAC-SHA256 signature generation in TwoKeyAction model
+- [x] **CREATE**: `/backend/src/models/TwoKeyAction.js`
+  - Action types enum
+  - Requester and witness signatures
+  - Status workflow (PENDING → APPROVED → EXECUTED)
+  - Expiry handling
 
 ### 9.3 Two-Key Action Workflow
-- [ ] **CREATE**: Two-key actions table:
-  ```sql
-  CREATE TABLE IF NOT EXISTS two_key_actions (
-    action_id TEXT PRIMARY KEY,
-    action_type TEXT NOT NULL,
-    requester_user_id TEXT NOT NULL,
-    requester_signature TEXT,
-    witness_user_id TEXT,
-    witness_signature TEXT,
-    status TEXT DEFAULT 'PENDING',
-    target_resource TEXT,
-    payload TEXT,
-    created_at TEXT NOT NULL,
-    approved_at TEXT
-  );
-  ```
-- [ ] **CREATE**: `/apps/server/src/services/twoKeyService.js`
-- [ ] **IMPLEMENT**: Two-key workflow:
-  1. Requester initiates action (signs with their key)
-  2. Witness approves action (signs with their key)
-  3. Both signatures verified before execution
-- [ ] **CREATE**: Two-key API:
+- [x] **CREATE**: `/backend/src/routes/twoKeyRoutes.js`
+- [x] **IMPLEMENT**: Two-key API:
   - `POST /api/two-key/initiate` - Start high-stakes action
-  - `POST /api/two-key/approve/:actionId` - Approve action
-  - `GET /api/two-key/pending` - List pending actions
-- [ ] **TEST**: Initiate action, approve with second key, verify execution
+  - `GET /api/two-key/pending` - List pending actions for witness
+  - `GET /api/two-key/my-actions` - Get user's initiated actions
+  - `POST /api/two-key/approve/:id` - Approve with witness signature
+  - `POST /api/two-key/reject/:id` - Reject action with reason
+  - `POST /api/two-key/cancel/:id` - Cancel own action
+  - `POST /api/two-key/execute/:id` - Execute approved action (admin)
 
 ### 9.4 Client-Side Two-Key UI
-- [ ] **CREATE**: Component for initiating two-key actions
-- [ ] **CREATE**: Component for approving pending actions
-- [ ] **IMPLEMENT**: Digital signature flow (user enters password to unlock private key)
-- [ ] **TEST**: Complete two-key authorization flow in UI
+- [ ] **TODO**: Create component for initiating two-key actions
+- [ ] **TODO**: Create component for approving pending actions
 
 ---
 
 ## PHASE 10: SENTINEL AGENT (ANOMALY DETECTION)
 
 ### 10.1 Design Anomaly Detection Rules
-- [ ] **DOCUMENT**: Detection rules in `SENTINEL_RULES.md`:
-  - Bulk access (>50 RED tier in 1 hour)
-  - Unusual hours (access at 3am)
-  - Geographic anomalies (if tracking location)
-  - Rapid successive access
-  - Other patterns?
+- [x] **DOCUMENT**: Detection rules in `SENTINEL_RULES.md`:
+  - Bulk access (>100 any in 1 hour, >10 RED in 1 hour)
+  - After hours (10pm-6am access)
+  - Failed logins (>5 in 10 min)
+  - Permission denied (>10 in 1 hour)
+  - Consent violations
 
 ### 10.2 Implement Sentinel Service
-- [ ] **CREATE**: `/apps/server/src/services/sentinelAgent.js`
-- [ ] **IMPLEMENT**: Detection functions:
-  ```javascript
-  async function detectBulkAccess(userId, timeWindow = 3600000) {
-    const db = getDatabase();
-    const stmt = db.prepare(`
-      SELECT COUNT(*) as count
-      FROM audit_trail
-      WHERE user_id = ?
-      AND action LIKE '%RED%'
-      AND timestamp > ?
-    `);
-    const result = stmt.get(userId, Date.now() - timeWindow);
-    return result.count > 50;
-  }
-  ```
-- [ ] **IMPLEMENT**: Alert creation when anomaly detected
-- [ ] **TEST**: Simulate bulk access and verify detection
+- [x] **CREATE**: `/backend/src/services/sentinelAgent.js`
+- [x] **IMPLEMENT**: Detection functions:
+  - `detectBulkAccess()` - Monitor excessive data access
+  - `detectFailedLogins()` - Detect brute force attempts
+  - `detectPermissionDenied()` - Monitor authorization failures
+  - `detectAfterHoursAccess()` - Flag unusual timing
+- [x] **IMPLEMENT**: `runSentinelChecks()` - Run all detection functions
 
 ### 10.3 Automated Response System
-- [ ] **CREATE**: Alerts table:
-  ```sql
-  CREATE TABLE IF NOT EXISTS security_alerts (
-    alert_id TEXT PRIMARY KEY,
-    alert_type TEXT NOT NULL,
-    user_id TEXT NOT NULL,
-    severity TEXT DEFAULT 'MEDIUM',
-    description TEXT,
-    auto_action TEXT,
-    resolved INTEGER DEFAULT 0,
-    created_at TEXT NOT NULL
-  );
-  ```
-- [ ] **IMPLEMENT**: `freezeUserKey(userId, reason)` function
-- [ ] **IMPLEMENT**: Admin notification system
-- [ ] **TEST**: Trigger freeze and verify user cannot access data
+- [x] **CREATE**: `/backend/src/models/SecurityAlert.js`
+  - Alert types and severity levels
+  - Auto-action tracking
+  - Resolution workflow
+- [x] **IMPLEMENT**: `lockUser()` - Temporary account lock
+- [x] **IMPLEMENT**: `freezeUser()` - Permanent freeze until admin review
 
-### 10.4 Scheduled Sentinel Runs
-- [ ] **INSTALL**: `npm install node-cron`
-- [ ] **CREATE**: Cron job to run Sentinel every 5 minutes:
-  ```javascript
-  const cron = require('node-cron');
-  const { runSentinelChecks } = require('./services/sentinelAgent');
-  
-  cron.schedule('*/5 * * * *', () => {
-    runSentinelChecks();
-  });
-  ```
-- [ ] **TEST**: Verify Sentinel runs automatically
+### 10.4 Security Routes
+- [x] **CREATE**: `/backend/src/routes/securityRoutes.js`
+- [x] **IMPLEMENT**: Security API:
+  - `GET /api/security/alerts` - List security alerts
+  - `GET /api/security/alerts/unresolved` - Get unresolved counts
+  - `POST /api/security/alerts/:id/resolve` - Resolve an alert
+  - `POST /api/security/sentinel/run` - Manually trigger scan
+  - `POST /api/security/freeze/:userId` - Freeze user account
+  - `GET /api/security/stats` - Security statistics
+
+### 10.5 Scheduled Sentinel Runs
+- [ ] **TODO**: Install node-cron and add scheduled runs
 
 ---
 

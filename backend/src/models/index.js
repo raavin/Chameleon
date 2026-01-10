@@ -5,6 +5,10 @@ import Submission from './Submission.js';
 import ResearchArtifact from './ResearchArtifact.js';
 import AuditTrail from './AuditTrail.js';
 import User from './User.js';
+import PrivacyRule from './PrivacyRule.js';
+import Consent from './Consent.js';
+import TwoKeyAction from './TwoKeyAction.js';
+import SecurityAlert from './SecurityAlert.js';
 
 export {
   Manifest,
@@ -12,5 +16,9 @@ export {
   Submission,
   ResearchArtifact,
   AuditTrail,
-  User
+  User,
+  PrivacyRule,
+  Consent,
+  TwoKeyAction,
+  SecurityAlert
 };

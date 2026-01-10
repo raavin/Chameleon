@@ -1,16 +1,21 @@
 
 export type FieldType = 
   | 'text' 
+  | 'string'
   | 'number' 
   | 'photo' 
-  | 'bool' 
+  | 'bool'
+  | 'boolean'
   | 'select' 
   | 'date' 
   | 'textarea' 
   | 'relationship' 
   | 'map' 
   | 'file' 
-  | 'multiselect';
+  | 'multiselect'
+  | 'tel'
+  | 'email'
+  | 'checkbox';
 
 export interface ResearchNode {
   id: string;

@@ -15,6 +15,14 @@ export default function App() {
   const [manifests, setManifests] = useState<Manifest[]>([]);
   const [activeManifestId, setActiveManifestId] = useState<string | null>(null);
   const [activeDomainId, setActiveDomainId] = useState<string>('');
+  const [archivedManifestIds, setArchivedManifestIds] = useState<string[]>(() => {
+    const stored = localStorage.getItem('chameleon_archived_manifests');
+    return stored ? JSON.parse(stored) : [];
+  });
+  const [archivedArtifactIds, setArchivedArtifactIds] = useState<string[]>(() => {
+    const stored = localStorage.getItem('chameleon_archived_artifacts');
+    return stored ? JSON.parse(stored) : [];
+  });
   
   const [loading, setLoading] = useState(false);
   const [streamOutput, setStreamOutput] = useState<string>('');
@@ -38,31 +46,84 @@ export default function App() {
     setClients(cls);
   };
 
+  const toggleArchiveManifest = (manifestId: string) => {
+    setArchivedManifestIds(prev => {
+      const updated = prev.includes(manifestId) 
+        ? prev.filter(id => id !== manifestId)
+        : [...prev, manifestId];
+      localStorage.setItem('chameleon_archived_manifests', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const toggleArchiveArtifact = (manifestId: string) => {
+    setArchivedArtifactIds(prev => {
+      const updated = prev.includes(manifestId) 
+        ? prev.filter(id => id !== manifestId)
+        : [...prev, manifestId];
+      localStorage.setItem('chameleon_archived_artifacts', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const deleteManifest = async (manifestId: string) => {
+    if (!confirm('Are you sure you want to permanently delete this module?')) return;
+    
+    try {
+      // Delete from server
+      await fetch(`${import.meta.env.VITE_API_URL || '/api'}/manifests/${manifestId}`, {
+        method: 'DELETE'
+      });
+      
+      // Remove from archived lists
+      setArchivedManifestIds(prev => prev.filter(id => id !== manifestId));
+      setArchivedArtifactIds(prev => prev.filter(id => id !== manifestId));
+      localStorage.setItem('chameleon_archived_manifests', JSON.stringify(archivedManifestIds.filter(id => id !== manifestId)));
+      localStorage.setItem('chameleon_archived_artifacts', JSON.stringify(archivedArtifactIds.filter(id => id !== manifestId)));
+      
+      // Refresh data
+      await refreshData();
+    } catch (err) {
+      console.error('Failed to delete manifest:', err);
+      alert('Failed to delete module');
+    }
+  };
+
   const handleBuild = async (ctx: BuildContext) => {
     setLoading(true);
     setStreamOutput('');
     try {
+      console.log('[BUILD] Starting compileManifest with context:', ctx);
       const generated = await compileManifest(ctx, (chunk) => setStreamOutput(prev => prev + chunk));
       
+      console.log('[BUILD] compileManifest returned:', generated);
+      console.log('[BUILD] Generated manifest ID:', generated?.id);
+      console.log('[BUILD] Generated domains:', generated?.domains?.length);
+      
       // SAVE THE MANIFEST (Merge/Overwrite handled by DB logic usually, but here we just put)
+      console.log('[BUILD] Calling DB.saveManifest...');
       await DB.saveManifest(generated);
+      console.log('[BUILD] DB.saveManifest completed');
       
       // SAVE THE RESEARCH DOCUMENTS LOCALLY
       // Iterate through research nodes and save them to the 'research_artifacts' store
       if (generated.domains && generated.domains[0] && generated.domains[0].research_artifacts) {
+        console.log('[BUILD] Saving research artifacts:', generated.domains[0].research_artifacts.length);
         for (const artifact of generated.domains[0].research_artifacts) {
           await DB.saveResearchArtifact(artifact);
         }
       }
 
+      console.log('[BUILD] Calling refreshData...');
       await refreshData();
+      console.log('[BUILD] refreshData completed, manifests count:', manifests.length);
       
       setActiveManifestId(generated.id);
       setActiveDomainId(generated.domains[0]?.id || '');
       setSelectedClientId(null);
       setViewMode('intake');
     } catch (err: any) {
-      console.error(err);
+      console.error('[BUILD] ERROR:', err);
       alert(`Deep Research Node Failure: ${err.message || "Unknown error"}`);
     } finally {
       setLoading(false);
@@ -114,6 +175,11 @@ export default function App() {
       }}
       activeDomainId={activeDomainId}
       setActiveDomainId={setActiveDomainId}
+      archivedManifestIds={archivedManifestIds}
+      onToggleArchive={toggleArchiveManifest}
+      archivedArtifactIds={archivedArtifactIds}
+      onToggleArchiveArtifact={toggleArchiveArtifact}
+      onDeleteManifest={deleteManifest}
       selectedClientId={selectedClientId}
       onReset={() => setViewMode('home')}
     >

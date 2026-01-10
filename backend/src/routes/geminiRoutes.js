@@ -33,7 +33,7 @@ const getGenAI = () => {
  */
 router.post('/generate', async (req, res) => {
   try {
-    const { prompt, model = 'gemini-2.0-flash' } = req.body;
+    const { prompt, model = 'gemini-3-flash-preview' } = req.body;
     
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required' });
@@ -75,7 +75,7 @@ router.post('/generate', async (req, res) => {
  */
 router.post('/stream', async (req, res) => {
   try {
-    const { prompt, model = 'gemini-2.0-flash' } = req.body;
+    const { prompt, model = 'gemini-3-flash-preview' } = req.body;
     
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required' });
@@ -143,7 +143,10 @@ router.post('/manifest', async (req, res) => {
       currency = 'USD', 
       locale = 'en-US',
       researchContext = '',
-      existingManifest = null
+      existingManifest = null,
+      projectName = '',
+      fundingBody = '',
+      additionalContext = ''
     } = req.body;
     
     if (!domains || !Array.isArray(domains) || domains.length === 0) {
@@ -161,28 +164,36 @@ router.post('/manifest', async (req, res) => {
 
     const genAI = getGenAI();
     
-    // Use gemini-2.0-flash for manifest generation
+    // Use gemini-3-flash-preview for manifest generation
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-2.0-flash',
+      model: 'gemini-3-flash-preview',
       generationConfig: {
         maxOutputTokens: 65000,
         temperature: 0.7
       }
     });
 
+    // Detect if this is a Client Details module request
+    const isClientModule = projectName.toLowerCase().includes('client');
+
     // Build the prompt
     const mode = existingManifest ? 'MERGE' : 'CREATE';
-    const prompt = buildManifestPrompt({
-      domains,
-      region,
-      currency,
-      locale,
-      researchContext,
-      existingManifest,
-      mode
-    });
+    const prompt = isClientModule 
+      ? buildClientModulePrompt({ domains, region, currency, locale, additionalContext })
+      : buildManifestPrompt({
+          domains,
+          region,
+          currency,
+          locale,
+          researchContext,
+          existingManifest,
+          mode,
+          projectName,
+          fundingBody,
+          additionalContext
+        });
 
-    res.write(`data: ${JSON.stringify({ status: 'starting', mode })}\n\n`);
+    res.write(`data: ${JSON.stringify({ status: 'starting', mode: isClientModule ? 'CLIENT_MODULE' : mode })}\n\n`);
 
     const result = await model.generateContentStream(prompt);
     
@@ -227,78 +238,141 @@ router.post('/manifest', async (req, res) => {
 /**
  * Build the manifest generation prompt
  */
-function buildManifestPrompt({ domains, region, currency, locale, researchContext, existingManifest, mode }) {
-  const basePrompt = `You are an expert in legislative compliance and form design. Generate a comprehensive JSON manifest for a data collection system.
+function buildManifestPrompt({ domains, region, currency, locale, researchContext, existingManifest, mode, projectName, fundingBody, additionalContext }) {
+  const PROGRAM_NAME = projectName || domains.join(' & ') + " Initiative";
+  const SERVICE_TYPES = domains.join(', ');
+  const timestamp = new Date().toISOString();
 
-REGION: ${region}
-DOMAINS: ${domains.join(', ')}
-CURRENCY: ${currency}
-LOCALE: ${locale}
-MODE: ${mode}
+  const basePrompt = `
+# CHAMELEON PROTOCOL: DEEP LEGISLATIVE RESEARCH AGENT
 
-${researchContext ? `\n## RESEARCH CONTEXT\n${researchContext}\n` : ''}
+## YOUR ROLE
+You are a Legislative Research Agent. Conduct exhaustive deep research on a specific health/community program and compile ALL requirements.
 
-${existingManifest ? `\n## EXISTING MANIFEST TO MERGE WITH\n${JSON.stringify(existingManifest, null, 2)}\n` : ''}
+## INPUT PROVIDED
+- **Program Name:** ${PROGRAM_NAME}
+- **Location:** ${region}
+- **Service Type(s):** ${SERVICE_TYPES}
+- **Funding/Org:** ${fundingBody || 'General'}
+- **Context:** ${additionalContext || 'None'}
 
-Generate a complete manifest with this structure:
+${researchContext ? `## RESEARCH CONTEXT\n${researchContext}\n` : ''}
+
+## RESEARCH METHODOLOGY
+1. **Identification:** Official service models.
+2. **Framework Discovery:** Acts, Regulations, Standards.
+3. **Compliance Extraction:** Data fields, Reporting triggers.
+
+## IMPORTANT: FILE PERSISTENCE & FULL TEXT EXTRACTION
+
+For every relevant document (Act, Regulation, Standard) you find, you MUST:
+
+1. **Extract the FULL TEXT** (or as much as possible, e.g., 50+ key sections) into the "cached_content" field. Do NOT just summarize.
+2. We want to use this text for RAG (Retrieval Augmented Generation) later, so the more raw text you preserve, the better.
+3. Log the action as: "[DOWNLOAD] Saving <filename> ..."
+
+## OUTPUT JSON SCHEMA
+
 {
   "id": "uuid",
-  "version": "1.0.0",
-  "compiled_at": "ISO timestamp",
-  "config": {
-    "currency": "${currency}",
-    "locale": "${locale}",
-    "theme": "modern",
-    "region": "${region}"
-  },
-  "domains": [
-    {
-      "id": "domain_id",
-      "title": "Domain Title",
-      "sections": [
-        { "id": "section_id", "title": "Section Title", "description": "...", "field_ids": ["field1", "field2"] }
-      ],
-      "fields": [
-        {
-          "id": "field_id",
-          "label": "Field Label",
-          "type": "text|number|date|bool|select|multiselect|textarea|photo|file|relationship|map",
-          "placeholder": "...",
-          "options": ["for select types"],
-          "section_citation": "reference to library entry if applicable",
-          "is_identity_field": false,
-          "ui_config": {
-            "grid_span": 1,
-            "help_text": "Guidance for the user"
-          }
-        }
-      ],
-      "research_artifacts": [],
-      "governance_rules": [],
-      "subject_identifier_field": "the field id that identifies the subject"
-    }
-  ],
-  "library": {
-    "CITATION_KEY": {
-      "act_name": "Legislation Name",
-      "section_title": "Section Title",
-      "content": "Full text of the relevant section",
-      "analysis": "Why this matters for compliance"
-    }
-  }
+  "version": "1.0",
+  "compiled_at": "${timestamp}",
+  "config": { "currency": "${currency}", "locale": "${locale}", "theme": "modern", "region": "${region}" },
+  "domains": [{
+    "id": "string", 
+    "title": "string", 
+    "research_artifacts": [
+      {
+        "id": "string", 
+        "source": "WHO|UN|HRC|Local|Gov", 
+        "title": "string", 
+        "url": "string", 
+        "content_summary": "string",
+        "cached_content": "PASTE THE FULL EXTRACTED TEXT OF THE LEGISLATION/STANDARD HERE. DO NOT TRUNCATE IF POSSIBLE.",
+        "tags": ["string"]
+      }
+    ],
+    "sections": [{ "id": "string", "title": "string", "description": "string", "field_ids": ["string"] }], 
+    "fields": [{ "id": "string", "label": "string", "type": "string", "options": ["string"], "is_identity_field": boolean, "section_citation": "CITATION_ID", "ui_config": { "grid_span": 1|2, "help_text": "string" } }], 
+    "governance_rules": [{ "description": "string" }], 
+    "subject_identifier_field": "string"
+  }],
+  "library": { "CITATION_ID": { "act_name": "string", "section_title": "string", "content": "string", "analysis": "string" } }
 }
-
-REQUIREMENTS:
-1. Generate ALL fields exhaustively - do not summarize or abbreviate
-2. Include every boolean, date, option that would appear on a paper form
-3. Link fields to legislative citations where applicable
-4. Use appropriate field types
-5. Group fields into logical sections
-6. Mark identity fields (name, DOB, ID numbers) with is_identity_field: true
 
 Return ONLY valid JSON, no markdown or explanation.`;
 
   return basePrompt;
+}
+
+/**
+ * Build a Client Details module prompt
+ * This generates a client intake form with core demographic/identity fields
+ */
+function buildClientModulePrompt({ domains, region, currency, locale, additionalContext }) {
+  const timestamp = new Date().toISOString();
+
+  const prompt = `
+# CHAMELEON PROTOCOL: CLIENT DETAILS MODULE GENERATOR
+
+## YOUR ROLE
+You are generating a CLIENT DETAILS intake module - the core client profile that all other service modules will reference.
+
+## INPUT PROVIDED
+- **Location:** ${region}
+- **Focus Areas:** ${domains.join(', ')}
+- **Context:** ${additionalContext || 'None'}
+
+## MODULE PURPOSE
+1. Establish client identity and context for all other modules in the system
+2. Store demographic information that other service modules will reference
+3. Enable session-based client context across the application
+
+## IMPORTANT: FULL TEXT EXTRACTION
+For privacy legislation you reference, extract the FULL TEXT into "cached_content" for RAG purposes.
+
+## OUTPUT JSON SCHEMA
+
+{
+  "id": "client_details_uuid",
+  "version": "1.0",
+  "compiled_at": "${timestamp}",
+  "config": { "currency": "${currency}", "locale": "${locale}", "theme": "modern", "region": "${region}", "module_type": "CLIENT_CORE" },
+  "domains": [{
+    "id": "client_profile", 
+    "title": "Client Details", 
+    "research_artifacts": [
+      {
+        "id": "string", 
+        "source": "Gov|Local", 
+        "title": "Privacy legislation title", 
+        "url": "string", 
+        "content_summary": "string",
+        "cached_content": "FULL TEXT of privacy legislation relevant to ${region}",
+        "tags": ["privacy", "data-protection"]
+      }
+    ],
+    "sections": [{ "id": "string", "title": "string", "description": "string", "field_ids": ["string"] }], 
+    "fields": [{ "id": "string", "label": "string", "type": "string", "options": ["string"], "is_identity_field": boolean, "section_citation": "CITATION_ID", "ui_config": { "grid_span": 1|2, "help_text": "string" } }], 
+    "governance_rules": [{ "description": "string" }], 
+    "subject_identifier_field": "client_key"
+  }],
+  "library": { "CITATION_ID": { "act_name": "string", "section_title": "string", "content": "string", "analysis": "string" } }
+}
+
+## REQUIREMENTS
+1. Include a "client_key" field as the subject_identifier_field
+2. Include: given_name, family_name, date_of_birth, gender, address, phone_number, email, indigenous_status, cultural_background, preferred_language
+3. Include emergency contact fields
+4. All identity fields must have is_identity_field: true
+5. Field types: string, number, date, select, boolean, text
+6. Add section_citation on all fields linking to library entries
+7. Include privacy legislation for ${region} in library and research_artifacts
+8. Include governance_rules for client data handling
+
+Return ONLY valid JSON, no markdown or explanation.`;
+
+  return prompt;
 }
 
 /**

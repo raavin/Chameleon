@@ -15,16 +15,38 @@ interface LayoutProps {
   setActiveDomainId: (id: string) => void;
   selectedClientId: string | null;
   onReset: () => void;
+  archivedManifestIds: string[];
+  onToggleArchive: (manifestId: string) => void;
+  archivedArtifactIds: string[];
+  onToggleArchiveArtifact: (manifestId: string) => void;
+  onDeleteManifest: (manifestId: string) => void;
 }
 
 const Layout: React.FC<LayoutProps> = ({ 
   children, viewMode, setViewMode, manifests, activeManifestId, 
-  setActiveManifestId, activeDomainId, setActiveDomainId, selectedClientId, onReset 
+  setActiveManifestId, activeDomainId, setActiveDomainId, selectedClientId, onReset,
+  archivedManifestIds, onToggleArchive, archivedArtifactIds, onToggleArchiveArtifact, onDeleteManifest
 }) => {
   const { user, logout, isAuthenticated } = useAuth();
   const [isOnline, setIsOnline] = useState(true);
   const [pendingCount, setPendingCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
+  
+  // Collapsible section states
+  const [modulesExpanded, setModulesExpanded] = useState(true);
+  const [archivedExpanded, setArchivedExpanded] = useState(false);
+  const [artifactsExpanded, setArtifactsExpanded] = useState(true);
+
+  // Filter active vs archived manifests
+  const activeManifests = manifests.filter(m => !archivedManifestIds.includes(m.id));
+  const archivedManifests = manifests.filter(m => archivedManifestIds.includes(m.id));
+  
+  // Filter active vs archived artifacts
+  const activeArtifacts = manifests.filter(m => !archivedArtifactIds.includes(m.id));
+  const archivedArtifacts = manifests.filter(m => archivedArtifactIds.includes(m.id));
+  
+  // Combined archived count
+  const totalArchivedCount = archivedManifests.length + archivedArtifacts.length;
 
   // Check online status and pending sync count periodically
   useEffect(() => {
@@ -59,70 +81,223 @@ const Layout: React.FC<LayoutProps> = ({
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">Operator Command Center</p>
         </div>
 
-        <nav className="flex-1 px-4 space-y-12 overflow-y-auto scrollbar-hide pb-8">
-          {/* Main Terminal Section */}
-          <section>
-            <h3 className="px-4 text-[10px] font-black text-slate-300 uppercase tracking-widest mb-4">Core Terminal</h3>
-            <div className="space-y-2">
-              {[
-                { id: 'directory', label: 'Client Directory', icon: '👥' },
-                { id: 'home', label: 'Deploy Protocol', icon: '⚡' },
-              ].map(item => (
-                <button
-                  key={item.id}
-                  onClick={() => setViewMode(item.id)}
-                  className={`w-full flex items-center gap-4 px-4 py-4 rounded-2xl text-sm font-bold transition-all ${viewMode === item.id ? 'bg-slate-900 text-white shadow-xl shadow-slate-200' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
-                >
-                  <span className="text-lg">{item.icon}</span>
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </section>
+        <nav className="flex-1 px-4 overflow-y-auto scrollbar-hide pb-8 flex flex-col">
+          {/* Top section with main navigation */}
+          <div className="space-y-8">
+            {/* Client Directory - standalone at top */}
+            <section>
+              <button
+                onClick={() => setViewMode('directory')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${viewMode === 'directory' ? 'bg-slate-900 text-white shadow-xl shadow-slate-200' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
+              >
+                <span className="text-base">👥</span>
+                Client Directory
+              </button>
+            </section>
 
-          {/* Deployed Modules (The Actual Forms) */}
-          <section>
-            <h3 className="px-4 text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4">Active Modules</h3>
-            <div className="space-y-2">
-              {manifests.length === 0 ? (
-                <p className="px-4 text-xs text-slate-400 italic">No protocols deployed</p>
-              ) : (
-                manifests.map(m => (
-                  <button
-                    key={m.id}
-                    onClick={() => {
-                      setActiveManifestId(m.id);
-                      setActiveDomainId(m.domains[0]?.id || '');
-                      setViewMode('intake');
-                    }}
-                    className={`w-full flex items-center gap-4 px-4 py-4 rounded-xl text-xs font-bold transition-all ${activeManifestId === m.id && viewMode === 'intake' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
-                  >
-                    <span>🛡️</span>
-                    <div className="text-left">
-                      <p className="truncate w-44">{m.domains[0]?.title || 'Unknown'}</p>
-                      <p className={`text-[9px] uppercase opacity-60 ${activeManifestId === m.id && viewMode === 'intake' ? 'text-white' : 'text-slate-400'}`}>{m.config.region}</p>
-                    </div>
-                  </button>
-                ))
+            {/* Active Modules */}
+            <section>
+              <button 
+                onClick={() => setModulesExpanded(!modulesExpanded)}
+                className="w-full flex items-center justify-between px-4 mb-3 group"
+              >
+                <h3 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Active Modules</h3>
+                <span className={`text-emerald-600 transition-transform duration-200 ${modulesExpanded ? 'rotate-0' : '-rotate-90'}`}>
+                  ▼
+                </span>
+              </button>
+              {modulesExpanded && (
+                <div className="space-y-1">
+                  {activeManifests.length === 0 ? (
+                    <p className="px-4 text-xs text-slate-400 italic">No protocols deployed</p>
+                  ) : (
+                    activeManifests.filter(m => m.domains && m.domains.length > 0).map(m => (
+                      <div
+                        key={m.id}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all ${activeManifestId === m.id && viewMode === 'intake' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
+                      >
+                        <button
+                          onClick={() => {
+                            setActiveManifestId(m.id);
+                            setActiveDomainId(m.domains[0]?.id || '');
+                            setViewMode('intake');
+                          }}
+                          className="flex-1 flex items-center gap-3 text-left"
+                        >
+                          <span>🛡️</span>
+                          <div>
+                            <p className="truncate w-36">{m.domains[0]?.title || 'Unknown'}</p>
+                            <p className={`text-[9px] uppercase opacity-60 ${activeManifestId === m.id && viewMode === 'intake' ? 'text-white' : 'text-slate-400'}`}>{m.config?.region || 'Unknown'}</p>
+                          </div>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleArchive(m.id);
+                          }}
+                          className={`p-1.5 rounded-md transition-colors ${activeManifestId === m.id && viewMode === 'intake' ? 'hover:bg-emerald-700 text-white/70 hover:text-white' : 'hover:bg-slate-200 text-slate-400 hover:text-slate-600'}`}
+                          title="Archive module"
+                        >
+                          📦
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
               )}
-            </div>
-          </section>
+            </section>
+          </div>
 
-          {/* System Admin Section (Source Specs) */}
-          <section>
-            <h3 className="px-4 text-[10px] font-black text-slate-300 uppercase tracking-widest mb-4">System Artifacts</h3>
-            <div className="space-y-1">
-              {manifests.map(m => (
-                <button
-                  key={m.id}
-                  onClick={() => { setActiveManifestId(m.id); setViewMode('manifest'); }}
-                  className={`w-full text-left px-4 py-3 rounded-xl text-[10px] font-bold transition-all ${activeManifestId === m.id && viewMode === 'manifest' ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}
+          {/* Spacer to push bottom section down */}
+          <div className="flex-1" />
+
+          {/* Bottom section - Deploy, Artifacts, Archived */}
+          <div className="space-y-4 pt-4 border-t border-slate-100">
+            {/* Deploy Protocol */}
+            <button
+              onClick={() => setViewMode('home')}
+              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${viewMode === 'home' ? 'bg-slate-900 text-white shadow-xl shadow-slate-200' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
+            >
+              <span className="text-base">⚡</span>
+              Deploy Protocol
+            </button>
+
+            {/* System Artifacts */}
+            <section>
+              <button 
+                onClick={() => setArtifactsExpanded(!artifactsExpanded)}
+                className="w-full flex items-center justify-between px-4 mb-2 group"
+              >
+                <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-widest">System Artifacts</h3>
+                <span className={`text-slate-400 transition-transform duration-200 ${artifactsExpanded ? 'rotate-0' : '-rotate-90'}`}>
+                  ▼
+                </span>
+              </button>
+              {artifactsExpanded && (
+                <div className="space-y-1">
+                  {activeArtifacts.length === 0 ? (
+                    <p className="px-4 text-xs text-slate-400 italic">No artifacts</p>
+                  ) : (
+                    activeArtifacts.map(m => (
+                      <div
+                        key={m.id}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${activeManifestId === m.id && viewMode === 'manifest' ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+                      >
+                        <button
+                          onClick={() => { setActiveManifestId(m.id); setViewMode('manifest'); }}
+                          className="flex-1 text-left"
+                        >
+                          📄 SPEC: {m.config?.region || 'Unknown'} v{m.version || '1.0'}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleArchiveArtifact(m.id);
+                          }}
+                          className="p-1 rounded-md hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
+                          title="Archive artifact"
+                        >
+                          📦
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </section>
+
+            {/* Archived Section */}
+            {totalArchivedCount > 0 && (
+              <section>
+                <button 
+                  onClick={() => setArchivedExpanded(!archivedExpanded)}
+                  className="w-full flex items-center justify-between px-4 mb-2 group"
                 >
-                  📄 SPEC: {m.config.region} v{m.version}
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Archived ({totalArchivedCount})</h3>
+                  <span className={`text-slate-400 transition-transform duration-200 ${archivedExpanded ? 'rotate-0' : '-rotate-90'}`}>
+                    ▼
+                  </span>
                 </button>
-              ))}
-            </div>
-          </section>
+                {archivedExpanded && (
+                  <div className="space-y-1">
+                    {/* Archived Modules */}
+                    {archivedManifests.filter(m => m.domains && m.domains.length > 0).map(m => (
+                      <div
+                        key={`mod-${m.id}`}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:bg-slate-50 transition-all"
+                      >
+                        <button
+                          onClick={() => {
+                            setActiveManifestId(m.id);
+                            setActiveDomainId(m.domains[0]?.id || '');
+                            setViewMode('intake');
+                          }}
+                          className="flex-1 flex items-center gap-2 text-left opacity-60"
+                        >
+                          <span>🛡️</span>
+                          <span className="truncate">{m.domains[0]?.title || 'Unknown'}</span>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleArchive(m.id);
+                          }}
+                          className="p-1 rounded-md hover:bg-slate-200 text-slate-400 hover:text-emerald-600 transition-colors"
+                          title="Restore module"
+                        >
+                          ↩️
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteManifest(m.id);
+                          }}
+                          className="p-1 rounded-md hover:bg-red-100 text-slate-400 hover:text-red-600 transition-colors"
+                          title="Delete permanently"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    ))}
+                    {/* Archived Artifacts */}
+                    {archivedArtifacts.map(m => (
+                      <div
+                        key={`art-${m.id}`}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-bold text-slate-400 hover:bg-slate-50 transition-all"
+                      >
+                        <button
+                          onClick={() => { setActiveManifestId(m.id); setViewMode('manifest'); }}
+                          className="flex-1 text-left opacity-60"
+                        >
+                          📄 SPEC: {m.config?.region || 'Unknown'} v{m.version || '1.0'}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleArchiveArtifact(m.id);
+                          }}
+                          className="p-1 rounded-md hover:bg-slate-200 text-slate-400 hover:text-emerald-600 transition-colors"
+                          title="Restore artifact"
+                        >
+                          ↩️
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteManifest(m.id);
+                          }}
+                          className="p-1 rounded-md hover:bg-red-100 text-slate-400 hover:text-red-600 transition-colors"
+                          title="Delete permanently"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+          </div>
         </nav>
 
         <div className="p-8 border-t border-slate-100 bg-slate-50/50 space-y-2">

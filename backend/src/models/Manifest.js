@@ -10,7 +10,8 @@ const FieldSchema = new mongoose.Schema({
   type: { 
     type: String, 
     required: true,
-    enum: ['text', 'number', 'photo', 'bool', 'select', 'date', 'textarea', 'relationship', 'map', 'file', 'multiselect']
+    // Flexible enum to handle various AI outputs
+    enum: ['text', 'string', 'number', 'photo', 'bool', 'boolean', 'select', 'date', 'textarea', 'relationship', 'map', 'file', 'multiselect', 'tel', 'email', 'checkbox']
   },
   placeholder: String,
   options: [String],
@@ -42,8 +43,8 @@ const FormSectionSchema = new mongoose.Schema({
 const ResearchArtifactEmbeddedSchema = new mongoose.Schema({
   id: { type: String, required: true },
   source: { 
-    type: String, 
-    enum: ['WHO', 'UN', 'HRC', 'LocalStatute', 'NGO_Standard', 'Local', 'Gov']
+    type: String,
+    // Flexible to handle various AI outputs like "Local/Gov", "Gov", etc.
   },
   title: { type: String, required: true },
   url: String,

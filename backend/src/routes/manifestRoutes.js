@@ -10,7 +10,6 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const manifests = await Manifest.find()
-      .select('id version compiled_at config')
       .sort({ compiled_at: -1 });
     res.json(manifests);
   } catch (err) {
@@ -61,7 +60,11 @@ router.post('/', async (req, res) => {
   try {
     const manifestData = req.body;
     
+    console.log('[MANIFEST API] POST received, id:', manifestData.id);
+    console.log('[MANIFEST API] Domains count:', manifestData.domains?.length);
+    
     if (!manifestData.id) {
+      console.error('[MANIFEST API] No ID provided');
       return res.status(400).json({ error: 'Manifest id is required' });
     }
 
@@ -71,14 +74,17 @@ router.post('/', async (req, res) => {
     }
 
     // Upsert: update if exists, create if not
+    console.log('[MANIFEST API] Upserting to MongoDB...');
     const manifest = await Manifest.findOneAndUpdate(
       { id: manifestData.id },
       manifestData,
       { upsert: true, new: true, runValidators: true }
     );
 
+    console.log('[MANIFEST API] Saved successfully, _id:', manifest._id);
     res.status(201).json(manifest);
   } catch (err) {
+    console.error('[MANIFEST API] Error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

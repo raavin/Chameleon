@@ -72,22 +72,22 @@ const CRMView: React.FC<CRMViewProps> = ({ manifests, submissions, onSelectClien
                 <td className="px-8 py-6">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center font-black text-white group-hover:bg-emerald-600 transition-all">
-                      {client.name.charAt(0)}
+                      {client.name?.charAt(0) || '?'}
                     </div>
                     <div>
-                      <p className="font-bold text-slate-900 leading-none">{client.name}</p>
+                      <p className="font-bold text-slate-900 leading-none">{client.name || 'Unknown'}</p>
                       <p className="text-[10px] font-mono text-slate-400 mt-1.5 uppercase tracking-tighter truncate w-40">{client.id}</p>
                     </div>
                   </div>
                 </td>
                 <td className="px-8 py-6 text-center">
                   <span className="px-4 py-1 bg-white border border-slate-100 rounded-full text-[10px] font-black text-slate-500 shadow-sm">
-                    {client.submissions.length} Episodes
+                    {client.submissions?.length || 0} Episodes
                   </span>
                 </td>
                 <td className="px-8 py-6 text-right">
                   <p className="font-bold text-slate-600">
-                    {client.submissions.length > 0 
+                    {client.submissions?.length > 0 
                       ? new Date(client.submissions[0].timestamp).toLocaleDateString()
                       : 'N/A'
                     }
