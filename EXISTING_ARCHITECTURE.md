@@ -358,4 +358,132 @@ const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
 
 ---
 
+## Critical Implementation Notes (MERN Migration)
+
+### Mongoose Schema Flexibility
+
+The AI (Gemini) generates JSON with varying field types and values. The Mongoose schemas must be flexible enough to accept these variations:
+
+**Field Types (FieldSchema.type enum):**
+```javascript
+enum: ['text', 'string', 'number', 'photo', 'bool', 'boolean', 'select', 'date', 'textarea', 'relationship', 'map', 'file', 'multiselect', 'tel', 'email', 'checkbox']
+```
+- `text` and `string` are equivalent (AI uses both)
+- `bool` and `boolean` are equivalent (AI uses both)
+- `checkbox` is treated as boolean
+- `tel` and `email` render as text inputs with appropriate HTML5 types
+
+**Research Artifact Source:**
+- Do NOT use enum restriction - AI generates varied sources like `"Local/Gov"`, `"Gov"`, `"Local"`, `"WHO"`, etc.
+- Keep as plain `String` type
+
+### Manifest JSON Structure
+
+The working manifest structure (order matters for AI consistency):
+
+```json
+{
+  "id": "uuid",
+  "version": "1.0",
+  "compiled_at": "ISO timestamp",
+  "config": { "currency", "locale", "theme": "modern", "region" },
+  "domains": [{
+    "id": "string",
+    "title": "string",
+    "research_artifacts": [...],  // BEFORE sections
+    "sections": [...],
+    "fields": [...],
+    "governance_rules": [{ "description": "string" }],
+    "subject_identifier_field": "string"
+  }],
+  "library": { "CITATION_ID": { "act_name", "section_title", "content", "analysis" } }
+}
+```
+
+### Gemini API Configuration
+
+**Model:** `gemini-3-flash-preview` (as of Jan 2026)
+- Fallback: `gemini-2.0-flash`
+- The model name changes frequently - check Google AI Studio for current models
+
+**Streaming:** Uses Server-Sent Events (SSE)
+- Content-Type: `text/event-stream` (NOT `text-event-stream`)
+- Backend streams chunks, frontend accumulates
+- Final message includes `{ done: true, manifest: {...} }`
+
+### Merge Mode (Currently Disabled)
+
+Merge mode was disabled due to issues with duplicate fields. To re-enable:
+1. Uncomment code in `frontend/services/geminiService.ts`
+2. The backend detects `existingManifest` in payload and sets mode to MERGE
+3. AI prompt includes merge instructions
+
+### Legislation References (§ Button)
+
+Fields can link to legislation via `section_citation`:
+1. Field has `section_citation: "CITATION_KEY"`
+2. Manifest has `library: { "CITATION_KEY": { act_name, section_title, content, analysis } }`
+3. Engine.tsx shows § button when `field.section_citation` exists
+4. LegislationViewer.tsx displays the full citation in a slide-out drawer
+
+### Research Artifacts Structure
+
+Each artifact must be a proper object (not a string):
+```json
+{
+  "id": "ra-1",
+  "source": "Gov",
+  "title": "Document Title",
+  "url": "https://...",
+  "content_summary": "Brief summary",
+  "cached_content": "FULL TEXT for RAG",
+  "tags": ["tag1", "tag2"]
+}
+```
+
+### IndexedDB Key Path
+
+All stores use `keyPath: 'id'` - every object must have an `id` field or save will fail.
+The `saveManifest` and `saveResearchArtifact` functions now auto-generate IDs if missing.
+
+### MongoDB Connection (WSL + Windows)
+
+If using Windows MongoDB Compass with WSL MongoDB:
+- MongoDB binds to `127.0.0.1` by default (WSL only)
+- Either change `/etc/mongod.conf` to `bindIp: 0.0.0.0` and connect via WSL IP
+- Or use port forwarding with `socat`
+
+### Environment Variables
+
+**Backend (.env):**
+```
+MONGODB_URI=mongodb://localhost:27017/chameleon
+GEMINI_API_KEY=your_key_here
+JWT_SECRET=your_secret
+PORT=3001
+```
+
+**Frontend (.env):**
+```
+VITE_API_URL=http://localhost:3001/api
+```
+
+### NPM Scripts
+
+```bash
+npm run dev           # Runs both frontend and backend
+npm run dev:frontend  # Frontend only (port 5173)
+npm run dev:backend   # Backend only (port 3001)
+npm run build         # Production build of frontend
+```
+
+### Common Errors
+
+1. **EADDRINUSE :3001** - Kill existing process: `lsof -ti :3001 | xargs kill -9`
+2. **Mongoose duplicate index warning** - Harmless, can be ignored
+3. **API key leaked** - Generate new key in Google AI Studio
+4. **Cannot create property 'id' on string** - Research artifacts are strings, not objects (prompt issue)
+
+---
+
 **End of Phase 0.1 Documentation**
