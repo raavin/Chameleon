@@ -73,6 +73,7 @@ export interface Manifest {
   id: string;
   version: string;
   compiled_at: string;
+  order?: number;
   config: {
     currency: string;
     locale: string;

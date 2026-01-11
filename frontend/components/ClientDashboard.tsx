@@ -1,6 +1,22 @@
 
 import React from 'react';
 import { Submission, Manifest } from '../types';
+import {
+  DndContext, 
+  closestCenter,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface ClientDashboardProps {
   clientId: string;
@@ -8,13 +24,92 @@ interface ClientDashboardProps {
   manifests: Manifest[];
   onIntake: (mid: string, did: string) => void;
   onViewEpisode: (sub: Submission) => void;
+  onReorder?: (ids: string[]) => void;
 }
 
-const ClientDashboard: React.FC<ClientDashboardProps> = ({ clientId, submissions, manifests, onIntake, onViewEpisode }) => {
+// Sortable Item Component
+const SortableManifestItem: React.FC<{ manifest: Manifest, onIntake: (mid: string, did: string) => void }> = ({ manifest, onIntake }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: manifest.id });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    zIndex: isDragging ? 10 : 1,
+    opacity: isDragging ? 0.8 : 1,
+  };
+
+  return (
+    <div 
+      ref={setNodeRef} 
+      style={style} 
+      {...attributes}
+      className={`bg-white p-8 rounded-[2.5rem] border transition-all shadow-sm group relative ${isDragging ? 'border-emerald-500 shadow-xl' : 'border-slate-200 hover:border-emerald-500'}`}
+    >
+      <div 
+        ref={setActivatorNodeRef}
+        {...listeners}
+        style={{ touchAction: 'none' }}
+        className="absolute left-4 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center text-slate-300 cursor-grab active:cursor-grabbing hover:text-slate-500 touch-none z-20"
+      >
+        ⋮⋮
+      </div>
+      <div className="flex justify-between items-center pl-6">
+        <div>
+          <h4 className="text-xl font-bold text-slate-800">{manifest.domains[0]?.title}</h4>
+          <p className="text-xs text-slate-400 mt-1 font-bold uppercase tracking-widest">{manifest.config.region}</p>
+        </div>
+        <button 
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => onIntake(manifest.id, manifest.domains[0]?.id)}
+          className="px-6 py-3 bg-slate-900 text-white font-black rounded-xl text-xs hover:bg-emerald-600 transition-colors shadow-lg cursor-pointer z-10"
+        >
+          New Intake
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const ClientDashboard: React.FC<ClientDashboardProps> = ({ clientId, submissions, manifests, onIntake, onViewEpisode, onReorder }) => {
   const clientSubs = submissions.filter(s => s.subject_id === clientId);
   // Get latest name from history
   const latestData = clientSubs[0]?.data || {};
   const displayName = latestData.full_name || latestData.name || clientId;
+
+  const sensors = useSensors(
+    useSensor(MouseSensor, {
+      activationConstraint: {
+        distance: 10,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 250,
+        tolerance: 5,
+      },
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id && onReorder) {
+      const oldIndex = manifests.findIndex((m) => m.id === active.id);
+      const newIndex = manifests.findIndex((m) => m.id === over.id);
+      
+      const newOrder = arrayMove(manifests, oldIndex, newIndex);
+      
+      onReorder(newOrder.map(m => m.id));
+    }
+  };
   
   return (
     <div className="max-w-6xl mx-auto space-y-12 pb-24">
@@ -45,22 +140,24 @@ const ClientDashboard: React.FC<ClientDashboardProps> = ({ clientId, submissions
         <section className="space-y-6">
           <h3 className="px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Available Modules</h3>
           <div className="grid grid-cols-1 gap-4">
-            {manifests.map(m => (
-              <div key={m.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-200 hover:border-emerald-500 transition-all shadow-sm group">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h4 className="text-xl font-bold text-slate-800">{m.domains[0]?.title}</h4>
-                    <p className="text-xs text-slate-400 mt-1 font-bold uppercase tracking-widest">{m.config.region}</p>
-                  </div>
-                  <button 
-                    onClick={() => onIntake(m.id, m.domains[0]?.id)}
-                    className="px-6 py-3 bg-slate-900 text-white font-black rounded-xl text-xs hover:bg-emerald-600 transition-colors shadow-lg"
-                  >
-                    New Intake
-                  </button>
-                </div>
-              </div>
-            ))}
+            <DndContext 
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext 
+                items={manifests.map(m => m.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {manifests.map(m => (
+                  <SortableManifestItem 
+                    key={m.id} 
+                    manifest={m} 
+                    onIntake={onIntake} 
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
           </div>
         </section>
 

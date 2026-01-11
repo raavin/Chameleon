@@ -3,6 +3,22 @@ import React, { useState, useEffect } from 'react';
 import { Manifest } from '../types';
 import { DB } from '../services/dbService';
 import { useAuth } from '../contexts/AuthContext';
+import {
+  DndContext,
+  closestCenter,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -20,12 +36,74 @@ interface LayoutProps {
   archivedArtifactIds: string[];
   onToggleArchiveArtifact: (manifestId: string) => void;
   onDeleteManifest: (manifestId: string) => void;
+  onReorderManifests?: (ids: string[]) => void;
 }
+
+const SortableActiveManifestItem: React.FC<{
+  manifest: Manifest;
+  isActive: boolean;
+  viewMode: string;
+  onSelect: () => void;
+  onArchive: (e: React.MouseEvent) => void;
+}> = ({ manifest, isActive, viewMode, onSelect, onArchive }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: manifest.id });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    zIndex: isDragging ? 10 : 1,
+    opacity: isDragging ? 0.85 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all ${isActive && viewMode === 'intake' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
+    >
+      <div
+        ref={setActivatorNodeRef}
+        {...listeners}
+        style={{ touchAction: 'none' }}
+        className={`text-slate-300 cursor-grab active:cursor-grabbing hover:text-slate-500 ${isActive && viewMode === 'intake' ? 'text-emerald-100 hover:text-white' : ''}`}
+      >
+        ⋮⋮
+      </div>
+      <button
+        onClick={onSelect}
+        className="flex-1 flex items-center gap-3 text-left"
+      >
+        <span>🛡️</span>
+        <div>
+          <p className="truncate w-36">{manifest.domains[0]?.title || 'Unknown'}</p>
+          <p className={`text-[9px] uppercase opacity-60 ${isActive && viewMode === 'intake' ? 'text-white' : 'text-slate-400'}`}>{manifest.config?.region || 'Unknown'}</p>
+        </div>
+      </button>
+      <button
+        onClick={onArchive}
+        className={`p-1.5 rounded-md transition-colors ${isActive && viewMode === 'intake' ? 'hover:bg-emerald-700 text-white/70 hover:text-white' : 'hover:bg-slate-200 text-slate-400 hover:text-slate-600'}`}
+        title="Archive module"
+      >
+        📦
+      </button>
+    </div>
+  );
+};
 
 const Layout: React.FC<LayoutProps> = ({ 
   children, viewMode, setViewMode, manifests, activeManifestId, 
   setActiveManifestId, activeDomainId, setActiveDomainId, selectedClientId, onReset,
-  archivedManifestIds, onToggleArchive, archivedArtifactIds, onToggleArchiveArtifact, onDeleteManifest
+  archivedManifestIds, onToggleArchive, archivedArtifactIds, onToggleArchiveArtifact, onDeleteManifest,
+  onReorderManifests
 }) => {
   const { user, logout, isAuthenticated } = useAuth();
   const [isOnline, setIsOnline] = useState(true);
@@ -72,6 +150,34 @@ const Layout: React.FC<LayoutProps> = ({
     return () => clearInterval(interval);
   }, [syncing]);
 
+  const sensors = useSensors(
+    useSensor(MouseSensor, {
+      activationConstraint: { distance: 10 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 250, tolerance: 5 },
+    })
+  );
+
+  const handleActiveModulesDragEnd = (event: DragEndEvent) => {
+    if (!onReorderManifests) return;
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const filteredActive = activeManifests.filter(m => m.domains && m.domains.length > 0);
+    const oldIndex = filteredActive.findIndex(m => m.id === active.id);
+    const newIndex = filteredActive.findIndex(m => m.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reorderedActive = arrayMove(filteredActive, oldIndex, newIndex);
+    const archivedIds = manifests
+      .filter(m => archivedManifestIds.includes(m.id))
+      .map(m => m.id);
+    const nextOrderIds = [...reorderedActive.map(m => m.id), ...archivedIds];
+
+    onReorderManifests(nextOrderIds);
+  };
+
   return (
     <div className="flex h-screen bg-slate-50 text-slate-900 font-sans">
       {/* Sidebar */}
@@ -111,37 +217,34 @@ const Layout: React.FC<LayoutProps> = ({
                   {activeManifests.length === 0 ? (
                     <p className="px-4 text-xs text-slate-400 italic">No protocols deployed</p>
                   ) : (
-                    activeManifests.filter(m => m.domains && m.domains.length > 0).map(m => (
-                      <div
-                        key={m.id}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all ${activeManifestId === m.id && viewMode === 'intake' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-50'}`}
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={handleActiveModulesDragEnd}
+                    >
+                      <SortableContext
+                        items={activeManifests.filter(m => m.domains && m.domains.length > 0).map(m => m.id)}
+                        strategy={verticalListSortingStrategy}
                       >
-                        <button
-                          onClick={() => {
-                            setActiveManifestId(m.id);
-                            setActiveDomainId(m.domains[0]?.id || '');
-                            setViewMode('intake');
-                          }}
-                          className="flex-1 flex items-center gap-3 text-left"
-                        >
-                          <span>🛡️</span>
-                          <div>
-                            <p className="truncate w-36">{m.domains[0]?.title || 'Unknown'}</p>
-                            <p className={`text-[9px] uppercase opacity-60 ${activeManifestId === m.id && viewMode === 'intake' ? 'text-white' : 'text-slate-400'}`}>{m.config?.region || 'Unknown'}</p>
-                          </div>
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onToggleArchive(m.id);
-                          }}
-                          className={`p-1.5 rounded-md transition-colors ${activeManifestId === m.id && viewMode === 'intake' ? 'hover:bg-emerald-700 text-white/70 hover:text-white' : 'hover:bg-slate-200 text-slate-400 hover:text-slate-600'}`}
-                          title="Archive module"
-                        >
-                          📦
-                        </button>
-                      </div>
-                    ))
+                        {activeManifests.filter(m => m.domains && m.domains.length > 0).map(m => (
+                          <SortableActiveManifestItem
+                            key={m.id}
+                            manifest={m}
+                            isActive={activeManifestId === m.id}
+                            viewMode={viewMode}
+                            onSelect={() => {
+                              setActiveManifestId(m.id);
+                              setActiveDomainId(m.domains[0]?.id || '');
+                              setViewMode('intake');
+                            }}
+                            onArchive={(e) => {
+                              e.stopPropagation();
+                              onToggleArchive(m.id);
+                            }}
+                          />
+                        ))}
+                      </SortableContext>
+                    </DndContext>
                   )}
                 </div>
               )}

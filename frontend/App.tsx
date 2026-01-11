@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { compileManifest, BuildContext } from './services/geminiService';
 import { DB } from './services/dbService';
+import { manifestApi } from './services/api';
 import { Manifest, Submission, ClientRecord } from './types';
 import Layout from './components/Layout';
 import Engine from './components/Engine';
@@ -86,6 +87,20 @@ export default function App() {
     } catch (err) {
       console.error('Failed to delete manifest:', err);
       alert('Failed to delete module');
+    }
+  };
+
+  const handleReorderManifests = async (ids: string[]) => {
+    // Optimistic update
+    const reordered = ids.map(id => manifests.find(m => m.id === id)!).filter(Boolean);
+    setManifests(reordered);
+
+    try {
+      await manifestApi.reorder(ids);
+      await refreshData();
+    } catch (err) {
+      console.error('Failed to reorder', err);
+      await refreshData(); // Revert on error
     }
   };
 
@@ -180,6 +195,7 @@ export default function App() {
       archivedArtifactIds={archivedArtifactIds}
       onToggleArchiveArtifact={toggleArchiveArtifact}
       onDeleteManifest={deleteManifest}
+      onReorderManifests={handleReorderManifests}
       selectedClientId={selectedClientId}
       onReset={() => setViewMode('home')}
     >
@@ -210,6 +226,7 @@ export default function App() {
             setSelectedSubmissionId(sub.id);
             setViewMode('review');
           }}
+          onReorder={handleReorderManifests}
         />
       )}
 

@@ -94,12 +94,14 @@ const ManifestSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
   version: { type: String, required: true },
   compiled_at: { type: Date, required: true },
+  order: { type: Number, default: 0 },
   config: {
     currency: String,
     locale: String,
     theme: { type: String, default: 'modern' },
     region: { type: String, required: true }
   },
+  order: { type: Number, default: 0 },
   domains: [DomainSchema],
   library: {                       // GOLD: Citation database
     type: Map,

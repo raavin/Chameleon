@@ -1,5 +1,7 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import Manifest from '../models/Manifest.js';
+import { buildManifestReorderOperations } from '../utils/manifestOrder.js';
 
 const router = express.Router();
 
@@ -10,8 +12,48 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const manifests = await Manifest.find()
-      .sort({ compiled_at: -1 });
+      .sort({ order: 1, compiled_at: -1 });
     res.json(manifests);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PUT /api/manifests/reorder
+ * Reorder manifests
+ */
+router.put('/reorder', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    let operations;
+    try {
+      operations = buildManifestReorderOperations(ids);
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
+
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        if (operations.length > 0) {
+          await Manifest.bulkWrite(operations, { session });
+        }
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '';
+      if (message.includes('Transaction numbers are only allowed')) {
+        if (operations.length > 0) {
+          await Manifest.bulkWrite(operations);
+        }
+      } else {
+        throw err;
+      }
+    } finally {
+      session.endSession();
+    }
+
+    res.json({ message: 'Manifests reordered successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

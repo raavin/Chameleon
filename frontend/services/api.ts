@@ -66,6 +66,12 @@ export const manifestApi = {
       body: JSON.stringify(manifest),
     }),
   
+  reorder: (ids: string[]) =>
+    apiFetch<any>('/manifests/reorder', {
+      method: 'PUT',
+      body: JSON.stringify({ ids }),
+    }),
+
   delete: (id: string) => 
     apiFetch<any>(`/manifests/${id}`, { method: 'DELETE' }),
 };

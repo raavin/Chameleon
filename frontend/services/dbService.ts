@@ -119,6 +119,17 @@ const IDB = {
   }
 };
 
+const sortManifests = (items: Manifest[]) => {
+  return [...items].sort((a, b) => {
+    const aOrder = typeof a.order === 'number' ? a.order : Number.POSITIVE_INFINITY;
+    const bOrder = typeof b.order === 'number' ? b.order : Number.POSITIVE_INFINITY;
+    if (aOrder !== bOrder) return aOrder - bOrder;
+    const aTime = Date.parse(a.compiled_at) || 0;
+    const bTime = Date.parse(b.compiled_at) || 0;
+    return bTime - aTime;
+  });
+};
+
 /**
  * Public DB API - Server-first with local fallback
  */
@@ -134,7 +145,7 @@ export const DB = {
         for (const m of serverManifests) {
           await IDB.put('manifests', m);
         }
-        return serverManifests;
+        return sortManifests(serverManifests);
       }
     } catch (err) {
       console.warn('Server unavailable for manifests, using local cache:', err);
@@ -167,7 +178,7 @@ export const DB = {
       return staticManifests;
     }
 
-    return local;
+    return sortManifests(local);
   },
 
   /**
