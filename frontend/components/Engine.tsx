@@ -11,9 +11,10 @@ interface EngineProps {
   onSuccess?: (data: any) => void;
   prefillData?: Record<string, any>;
   readOnly?: boolean;
+  canFinalize?: boolean;
 }
 
-const Engine: React.FC<EngineProps> = ({ domain, currency, library, onSuccess, prefillData, readOnly }) => {
+const Engine: React.FC<EngineProps> = ({ domain, currency, library, onSuccess, prefillData, readOnly, canFinalize = true }) => {
   // Ensure we always have an object, and defaults are handled
   const [formData, setFormData] = useState<Record<string, any>>(prefillData || {});
   const [sectionIndex, setSectionIndex] = useState(0);
@@ -200,7 +201,7 @@ const Engine: React.FC<EngineProps> = ({ domain, currency, library, onSuccess, p
       <div className={UI.card}>
         {/* Section Tabs */}
         <div className="border-b border-slate-200 bg-slate-50/50">
-          <div className="flex overflow-x-auto scrollbar-hide">
+          <div className="grid [grid-template-columns:repeat(auto-fit,minmax(140px,1fr))]">
             {domain.sections.map((section, idx) => (
               <button
                 key={section.id}
@@ -208,7 +209,7 @@ const Engine: React.FC<EngineProps> = ({ domain, currency, library, onSuccess, p
                   setSectionIndex(idx);
                   window.scrollTo({top: 0, behavior: 'smooth'});
                 }}
-                className={`flex-shrink-0 px-6 py-3 text-[10px] font-black uppercase tracking-widest border-b-2 transition-all ${
+                className={`px-3 py-3 text-[10px] font-black uppercase tracking-widest border-b-2 transition-all text-center leading-tight whitespace-normal ${
                   idx === sectionIndex 
                     ? 'border-emerald-500 text-emerald-700 bg-white' 
                     : 'border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-100'
@@ -285,8 +286,13 @@ const Engine: React.FC<EngineProps> = ({ domain, currency, library, onSuccess, p
              ) : (
                !readOnly && (
                 <button 
-                  onClick={() => { setIsSubmitting(true); setTimeout(() => onSuccess?.(formData), 1200); }}
-                  className={UI.button.action}
+                  onClick={() => {
+                    if (!canFinalize) return;
+                    setIsSubmitting(true);
+                    setTimeout(() => onSuccess?.(formData), 1200);
+                  }}
+                  disabled={!canFinalize}
+                  className={`${UI.button.action} disabled:opacity-40 disabled:cursor-not-allowed`}
                 >
                   {isSubmitting ? 'Syncing...' : 'Finalize'}
                 </button>

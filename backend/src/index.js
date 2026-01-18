@@ -4,6 +4,9 @@ import cors from 'cors';
 import mongoose from 'mongoose';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import session from 'express-session';
+import MongoStore from 'connect-mongo';
+import passport from './auth/passport.js';
 
 // Import routes
 import manifestRoutes from './routes/manifestRoutes.js';
@@ -22,9 +25,70 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+const isDev = process.env.NODE_ENV !== 'production';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/chameleon';
+
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
 app.use(express.json({ limit: '50mb' }));
+
+app.use(session({
+  name: 'chameleon.sid',
+  secret: process.env.SESSION_SECRET || 'chameleon-dev-session-secret',
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: MONGODB_URI,
+    collectionName: 'sessions'
+  }),
+  cookie: {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 1000 * 60 * 60 * 24 * 7
+  }
+}));
+app.use(passport.initialize());
+app.use(passport.session());
+
+if (isDev) {
+  app.use((req, res, next) => {
+    const start = Date.now();
+    console.log('[REQ]', req.method, req.originalUrl, {
+      headers: req.headers,
+      query: req.query,
+      body: req.body
+    });
+
+    const originalJson = res.json.bind(res);
+    const originalSend = res.send.bind(res);
+
+    res.json = (body) => {
+      const ms = Date.now() - start;
+      console.log('[RES]', req.method, req.originalUrl, {
+        status: res.statusCode,
+        duration_ms: ms,
+        body
+      });
+      return originalJson(body);
+    };
+
+    res.send = (body) => {
+      const ms = Date.now() - start;
+      console.log('[RES]', req.method, req.originalUrl, {
+        status: res.statusCode,
+        duration_ms: ms,
+        body
+      });
+      return originalSend(body);
+    };
+
+    next();
+  });
+}
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -67,12 +131,29 @@ if (process.env.NODE_ENV === 'production') {
   console.log('📦 Serving static frontend from:', frontendDist);
 }
 
-// MongoDB Connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/chameleon';
+if (isDev) {
+  mongoose.set('debug', (collectionName, method, query, doc, options) => {
+    console.log('[MONGO]', collectionName, method, {
+      query,
+      doc,
+      options
+    });
+  });
+}
 
 mongoose.connect(MONGODB_URI)
   .then(() => console.log('✅ MongoDB connected'))
   .catch(err => console.error('❌ MongoDB connection error:', err.message));
+
+mongoose.connection.on('connected', () => {
+  if (isDev) console.log('[MONGO] connected');
+});
+mongoose.connection.on('disconnected', () => {
+  if (isDev) console.log('[MONGO] disconnected');
+});
+mongoose.connection.on('error', (err) => {
+  if (isDev) console.log('[MONGO] error', err);
+});
 
 // Start server
 const PORT = process.env.PORT || 3001;

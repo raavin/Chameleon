@@ -5,8 +5,9 @@
  */
 
 import { Router } from 'express';
+import passport from 'passport';
 import User from '../models/User.js';
-import { generateToken, requireAuth, requireRole } from '../middleware/authMiddleware.js';
+import { requireAuth, requireRole } from '../middleware/authMiddleware.js';
 import { logAudit } from '../middleware/auditMiddleware.js';
 
 const router = Router();
@@ -49,9 +50,6 @@ router.post('/register', async (req, res) => {
       role: assignedRole
     });
     
-    // Generate token
-    const token = generateToken(user);
-    
     // Log audit
     await logAudit({
       user_id: user.id,
@@ -61,9 +59,14 @@ router.post('/register', async (req, res) => {
       metadata: { email, role: assignedRole }
     });
     
-    res.status(201).json({
-      token,
-      user: user.toPublicJSON()
+    req.login(user, (err) => {
+      if (err) {
+        console.error('Registration login error:', err);
+        return res.status(500).json({ error: 'Failed to start session' });
+      }
+      return res.status(201).json({
+        user: user.toPublicJSON()
+      });
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -75,56 +78,32 @@ router.post('/register', async (req, res) => {
  * POST /api/auth/login
  * Authenticate user and return JWT
  */
-router.post('/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password required' });
+router.post('/login', (req, res, next) => {
+  passport.authenticate('local', async (err, user, info) => {
+    try {
+      if (err) return next(err);
+      if (!user) {
+        return res.status(401).json({ error: info?.message || 'Invalid credentials' });
+      }
+
+      req.login(user, async (loginErr) => {
+        if (loginErr) return next(loginErr);
+
+        await logAudit({
+          user_id: user.id,
+          action: 'USER_LOGIN',
+          entity_type: 'User',
+          entity_id: user.id,
+          metadata: { email: user.email }
+        });
+
+        return res.json({ user: user.toPublicJSON ? user.toPublicJSON() : user });
+      });
+    } catch (error) {
+      console.error('Login error:', error);
+      return res.status(500).json({ error: 'Login failed' });
     }
-    
-    // Find user with password
-    const user = await User.findByEmailWithPassword(email);
-    
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-    
-    if (!user.is_active) {
-      return res.status(401).json({ error: 'Account is disabled' });
-    }
-    
-    // Verify password
-    const isValid = await user.verifyPassword(password);
-    
-    if (!isValid) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-    
-    // Update last login
-    user.last_login = new Date();
-    await user.save();
-    
-    // Generate token
-    const token = generateToken(user);
-    
-    // Log audit
-    await logAudit({
-      user_id: user.id,
-      action: 'USER_LOGIN',
-      entity_type: 'User',
-      entity_id: user.id,
-      metadata: { email }
-    });
-    
-    res.json({
-      token,
-      user: user.toPublicJSON()
-    });
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed' });
-  }
+  })(req, res, next);
 });
 
 /**
@@ -133,7 +112,7 @@ router.post('/login', async (req, res) => {
  */
 router.get('/me', requireAuth, async (req, res) => {
   try {
-    const user = await User.findOne({ id: req.user.userId });
+    const user = await User.findOne({ id: req.user.id });
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -185,7 +164,7 @@ router.patch('/users/:id', requireAuth, requireRole('ADMIN'), async (req, res) =
     
     // Log audit
     await logAudit({
-      user_id: req.user.userId,
+      user_id: req.user.id,
       action: 'USER_UPDATED',
       entity_type: 'User',
       entity_id: id,
@@ -208,7 +187,7 @@ router.delete('/users/:id', requireAuth, requireRole('ADMIN'), async (req, res) 
     const { id } = req.params;
     
     // Prevent self-deletion
-    if (id === req.user.userId) {
+    if (id === req.user.id) {
       return res.status(400).json({ error: 'Cannot delete your own account' });
     }
     
@@ -222,7 +201,7 @@ router.delete('/users/:id', requireAuth, requireRole('ADMIN'), async (req, res) 
     
     // Log audit
     await logAudit({
-      user_id: req.user.userId,
+      user_id: req.user.id,
       action: 'USER_DELETED',
       entity_type: 'User',
       entity_id: id,
@@ -257,7 +236,7 @@ router.post('/change-password', requireAuth, async (req, res) => {
     }
     
     // Get user with password
-    const user = await User.findOne({ id: req.user.userId }).select('+password_hash');
+    const user = await User.findOne({ id: req.user.id }).select('+password_hash');
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -286,6 +265,74 @@ router.post('/change-password', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Password change error:', error);
     res.status(500).json({ error: 'Failed to change password' });
+  }
+});
+
+/**
+ * POST /api/auth/logout
+ * Destroy current session
+ */
+router.post('/logout', requireAuth, (req, res, next) => {
+  req.logout((err) => {
+    if (err) return next(err);
+    req.session.destroy((destroyErr) => {
+      if (destroyErr) {
+        return res.status(500).json({ error: 'Failed to destroy session' });
+      }
+      res.clearCookie('chameleon.sid');
+      return res.json({ success: true });
+    });
+  });
+});
+
+/**
+ * PATCH /api/auth/preferences
+ * Update current user's preferences
+ */
+router.patch('/preferences', requireAuth, async (req, res) => {
+  try {
+    const { manifest_order, archived_manifest_ids, archived_artifact_ids } = req.body;
+    const updates = {};
+
+    if (manifest_order !== undefined) {
+      if (!Array.isArray(manifest_order)) {
+        return res.status(400).json({ error: 'manifest_order must be an array' });
+      }
+      updates['preferences.manifest_order'] = manifest_order;
+    }
+
+    if (archived_manifest_ids !== undefined) {
+      if (!Array.isArray(archived_manifest_ids)) {
+        return res.status(400).json({ error: 'archived_manifest_ids must be an array' });
+      }
+      updates['preferences.archived_manifest_ids'] = archived_manifest_ids;
+    }
+
+    if (archived_artifact_ids !== undefined) {
+      if (!Array.isArray(archived_artifact_ids)) {
+        return res.status(400).json({ error: 'archived_artifact_ids must be an array' });
+      }
+      updates['preferences.archived_artifact_ids'] = archived_artifact_ids;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'No preferences provided' });
+    }
+
+    const user = await User.findOneAndUpdate(
+      { id: req.user.id },
+      { $set: updates },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json(user.toPublicJSON());
+  } catch (error) {
+    console.error('Preferences update error:', error);
+    res.status(500).json({ error: 'Failed to update preferences' });
   }
 });
 

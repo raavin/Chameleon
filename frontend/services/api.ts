@@ -5,10 +5,8 @@
  * - All CRUD operations for manifests, clients, submissions, artifacts
  * - Automatic error handling
  * - Configurable base URL via environment variable
- * - Auth token injection
+ * - Session cookie support
  */
-
-import { getStoredToken } from '../contexts/AuthContext';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -25,19 +23,35 @@ async function apiFetch<T>(
     'Content-Type': 'application/json',
   };
 
-  // Add auth token if available
-  const token = getStoredToken();
-  if (token) {
-    defaultHeaders['Authorization'] = `Bearer ${token}`;
+  const isDev = import.meta.env.DEV;
+  const method = options.method || 'GET';
+  if (isDev) {
+    console.debug('[API REQ]', method, url, {
+      headers: {
+        ...defaultHeaders,
+        ...options.headers,
+      },
+      body: options.body
+    });
   }
 
   const response = await fetch(url, {
     ...options,
+    credentials: 'include',
     headers: {
       ...defaultHeaders,
       ...options.headers,
     },
   });
+
+  if (isDev) {
+    const responseBody = await response.clone().text();
+    console.debug('[API RES]', method, url, {
+      status: response.status,
+      ok: response.ok,
+      body: responseBody
+    });
+  }
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Unknown error' }));
@@ -53,6 +67,15 @@ async function apiFetch<T>(
 export const manifestApi = {
   getAll: () => 
     apiFetch<any[]>('/manifests'),
+
+  marketplace: (params: { q?: string; region?: string; domain?: string } = {}) => {
+    const search = new URLSearchParams();
+    if (params.q) search.append('q', params.q);
+    if (params.region) search.append('region', params.region);
+    if (params.domain) search.append('domain', params.domain);
+    const query = search.toString();
+    return apiFetch<any[]>(`/manifests/marketplace${query ? `?${query}` : ''}`);
+  },
   
   getById: (id: string) => 
     apiFetch<any>(`/manifests/${id}`),
@@ -64,6 +87,12 @@ export const manifestApi = {
     apiFetch<any>('/manifests', {
       method: 'POST',
       body: JSON.stringify(manifest),
+    }),
+
+  updateVisibility: (id: string, visibility: 'PUBLIC' | 'PRIVATE') =>
+    apiFetch<any>(`/manifests/${id}/visibility`, {
+      method: 'PATCH',
+      body: JSON.stringify({ visibility }),
     }),
   
   reorder: (ids: string[]) =>
@@ -167,25 +196,38 @@ export const healthCheck = () =>
  */
 export const authApi = {
   login: (email: string, password: string) =>
-    apiFetch<{ token: string; user: any }>('/auth/login', {
+    apiFetch<{ user: any }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
   
   register: (data: { email: string; password: string; name: string; role?: string }) =>
-    apiFetch<{ token: string; user: any }>('/auth/register', {
+    apiFetch<{ user: any }>('/auth/register', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
   
   me: () => 
     apiFetch<any>('/auth/me'),
+
+  logout: () =>
+    apiFetch<any>('/auth/logout', { method: 'POST' }),
   
   users: () => 
     apiFetch<any[]>('/auth/users'),
   
   updateUser: (id: string, data: any) =>
     apiFetch<any>(`/auth/users/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  updatePreferences: (data: {
+    manifest_order?: string[];
+    archived_manifest_ids?: string[];
+    archived_artifact_ids?: string[];
+  }) =>
+    apiFetch<any>('/auth/preferences', {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),

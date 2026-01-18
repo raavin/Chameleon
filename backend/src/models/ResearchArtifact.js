@@ -16,8 +16,7 @@ import mongoose from 'mongoose';
 const ResearchArtifactSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
   source: { 
-    type: String, 
-    enum: ['WHO', 'UN', 'HRC', 'LocalStatute', 'NGO_Standard', 'Local', 'Gov'],
+    type: String,
     required: true
   },
   title: { type: String, required: true },

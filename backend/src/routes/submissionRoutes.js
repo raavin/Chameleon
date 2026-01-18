@@ -73,23 +73,35 @@ router.post('/', async (req, res) => {
       { upsert: true, new: true, runValidators: true }
     );
 
-    // Auto-create or update client (matching existing behavior)
-    const clientName = submissionData.data?.full_name || 
-                       submissionData.data?.name || 
-                       'Resolved Identity';
+    const fromProfile =
+      submissionData.domain_id === 'client_profile' ||
+      submissionData.data?.module_type === 'CLIENT_CORE';
+    const clientName =
+      submissionData.data?.full_name ||
+      submissionData.data?.name ||
+      [submissionData.data?.given_name, submissionData.data?.family_name].filter(Boolean).join(' ') ||
+      'Resolved Identity';
 
-    await Client.findOneAndUpdate(
-      { id: submissionData.subject_id },
-      { 
-        id: submissionData.subject_id,
-        name: clientName
-      },
-      { upsert: true, new: true }
-    );
+    if (fromProfile) {
+      await Client.findOneAndUpdate(
+        { id: submissionData.subject_id },
+        {
+          id: submissionData.subject_id,
+          name: clientName
+        },
+        { upsert: true, new: true }
+      );
+    } else {
+      await Client.updateOne(
+        { id: submissionData.subject_id },
+        { $setOnInsert: { id: submissionData.subject_id, name: clientName } },
+        { upsert: true }
+      );
+    }
 
     // Log audit trail for submission creation
     await logAudit({
-      userId: req.user?.userId || req.headers['x-user-id'] || 'anonymous',
+      userId: req.user?.id || req.headers['x-user-id'] || 'anonymous',
       entityType: 'submission',
       entityId: submission.id,
       action: 'CREATE',

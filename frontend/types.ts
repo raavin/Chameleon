@@ -74,6 +74,13 @@ export interface Manifest {
   version: string;
   compiled_at: string;
   order?: number;
+  author?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  created_by?: string;
+  visibility?: 'PUBLIC' | 'PRIVATE';
   config: {
     currency: string;
     locale: string;
@@ -110,4 +117,9 @@ export interface User {
   is_active: boolean;
   last_login?: string;
   created_at: string;
+  preferences?: {
+    manifest_order?: string[];
+    archived_manifest_ids?: string[];
+    archived_artifact_ids?: string[];
+  };
 }

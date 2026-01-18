@@ -6,9 +6,12 @@
  */
 
 import { Router } from 'express';
+import { randomUUID } from 'crypto';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { optionalAuth } from '../middleware/authMiddleware.js';
 import { logAudit } from '../middleware/auditMiddleware.js';
+import { runLangGraphManifest } from '../services/langGraphAgent.js';
+import AgentImprovement from '../models/AgentImprovement.js';
 
 const router = Router();
 
@@ -143,6 +146,7 @@ router.post('/manifest', async (req, res) => {
       currency = 'USD', 
       locale = 'en-US',
       researchContext = '',
+      researchSources = [],
       existingManifest = null,
       projectName = '',
       fundingBody = '',
@@ -161,6 +165,8 @@ router.post('/manifest', async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+
+    const writeEvent = (payload) => res.write(`data: ${JSON.stringify(payload)}\n\n`);
 
     const genAI = getGenAI();
     
@@ -193,8 +199,30 @@ router.post('/manifest', async (req, res) => {
           additionalContext
         });
 
-    res.write(`data: ${JSON.stringify({ status: 'starting', mode: isClientModule ? 'CLIENT_MODULE' : mode })}\n\n`);
+    writeEvent({
+      status: 'starting',
+      mode: isClientModule ? 'CLIENT_MODULE' : mode,
+      detail: `Request received. Domains: ${domains.join(', ')}. Region: ${region}.`
+    });
+    if (Array.isArray(researchSources) && researchSources.length > 0) {
+      writeEvent({
+        status: 'research:sources',
+        detail: `Loaded ${researchSources.length} research file(s) from client bundle.`,
+        references: researchSources
+      });
+    } else {
+      writeEvent({
+        status: 'research:sources',
+        detail: 'No research files provided by client bundle. Using defaults.'
+      });
+    }
 
+    writeEvent({
+      status: 'generating',
+      mode,
+      detail: `Submitting manifest prompt (${prompt.length} chars). Waiting for model response...`,
+      prompt
+    });
     const result = await model.generateContentStream(prompt);
     
     let fullText = '';
@@ -203,6 +231,11 @@ router.post('/manifest', async (req, res) => {
       fullText += chunkText;
       res.write(`data: ${JSON.stringify({ chunk: chunkText })}\n\n`);
     }
+    writeEvent({
+      status: 'generating',
+      mode,
+      detail: `Model response streaming complete (${fullText.length} chars).`
+    });
 
     // Try to extract and validate JSON
     try {
@@ -236,6 +269,547 @@ router.post('/manifest', async (req, res) => {
 });
 
 /**
+ * POST /api/gemini/manifest-agent
+ * Agentic manifest generation using multi-step decomposition.
+ */
+router.post('/manifest-agent', async (req, res) => {
+  try {
+    const { 
+      domains, 
+      region, 
+      currency = 'USD', 
+      locale = 'en-US',
+      researchContext = '',
+      researchSources = [],
+      projectName = '',
+      fundingBody = '',
+      additionalContext = ''
+    } = req.body;
+
+    const runId = randomUUID();
+
+    if (!domains || !Array.isArray(domains) || domains.length === 0) {
+      return res.status(400).json({ error: 'Domains array is required' });
+    }
+
+    if (!region) {
+      return res.status(400).json({ error: 'Region is required' });
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const writeEvent = (payload) => res.write(`data: ${JSON.stringify(payload)}\n\n`);
+
+    const genAI = getGenAI();
+    const model = genAI.getGenerativeModel({ 
+      model: 'gemini-3-flash-preview',
+      generationConfig: {
+        maxOutputTokens: 65000,
+        temperature: 0.6
+      }
+    });
+
+    writeEvent({
+      status: 'agent:request-received',
+      detail: `Agent request received. Run ID: ${runId}. Domains: ${domains.join(', ')}. Region: ${region}.`,
+      run_id: runId
+    });
+    if (Array.isArray(researchSources) && researchSources.length > 0) {
+      writeEvent({
+        status: 'agent:research-sources',
+        detail: `Loaded ${researchSources.length} research file(s) from client bundle.`,
+        references: researchSources
+      });
+    } else {
+      writeEvent({
+        status: 'agent:research-sources',
+        detail: 'No research files provided by client bundle. Using defaults.'
+      });
+    }
+
+    const isClientModule = projectName.toLowerCase().includes('client');
+    if (isClientModule) {
+      const prompt = buildClientModulePrompt({ domains, region, currency, locale, additionalContext });
+      writeEvent({
+        status: 'agent:client-module',
+        detail: `Client module detected. Submitting client prompt (${prompt.length} chars).`,
+        prompt
+      });
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      writeEvent({
+        status: 'agent:client-module',
+        detail: `Client module response received (${text.length} chars).`
+      });
+      res.write(`data: ${JSON.stringify({ chunk: text })}\n\n`);
+      try {
+        const jsonStr = extractJSON(text);
+        const manifest = JSON.parse(jsonStr);
+        res.write(`data: ${JSON.stringify({ done: true, manifest })}\n\n`);
+      } catch (parseError) {
+        res.write(`data: ${JSON.stringify({ done: true, rawText: text, parseError: parseError.message })}\n\n`);
+      }
+      res.end();
+      return;
+    }
+
+    const PROGRAM_NAME = projectName || domains.join(' & ') + " Initiative";
+    const SERVICE_TYPES = domains.join(', ');
+
+    const agentResearchPrompt = `
+# CHAMELEON PROTOCOL: AGENT 1 - CONTEXT SYNTHESIS
+
+You are the lead synthesis agent. Produce a structured overview of the program with best-practice defaults.
+
+Input:
+- Program Name: ${PROGRAM_NAME}
+- Region: ${region}
+- Service Types: ${SERVICE_TYPES}
+- Funding/Org: ${fundingBody || 'General'}
+- Context: ${additionalContext || 'None'}
+
+${researchContext ? `Research Context:\n${researchContext}\n` : ''}
+
+Return JSON with:
+{
+  "summary": "string",
+  "program_goals": ["string"],
+  "compliance_themes": ["string"],
+  "required_data_domains": ["string"],
+  "risk_controls": ["string"],
+  "default_assumptions": ["string"]
+}`;
+
+    const agentDomainResearchPrompt = (contextText) => `
+# CHAMELEON PROTOCOL: AGENT 2 - DOMAIN RESEARCH
+
+You are the domain research agent. Identify domain-specific best practice, standards, and measurement needs.
+Focus on exhaustive data capture beyond minimum statutory requirements.
+
+Inputs:
+- Program Name: ${PROGRAM_NAME}
+- Region: ${region}
+- Service Types: ${SERVICE_TYPES}
+- Context Summary: ${contextText}
+- Research Context: ${researchContext || 'None'}
+
+Return JSON with:
+{
+  "domain_findings": [
+    {
+      "domain": "string",
+      "standards": ["string"],
+      "recommended_metrics": ["string"],
+      "critical_data_elements": ["string"]
+    }
+  ]
+}`;
+
+    const agentProgramSpecificsPrompt = (contextText, domainResearchText) => `
+# CHAMELEON PROTOCOL: AGENT 3 - PROGRAM SPECIFICS
+
+You are the program-specifics agent. Translate the program context into concrete data capture needs,
+workflow stages, and monitoring checkpoints.
+
+Inputs:
+- Program Name: ${PROGRAM_NAME}
+- Region: ${region}
+- Service Types: ${SERVICE_TYPES}
+- Context Summary: ${contextText}
+- Domain Research: ${domainResearchText}
+- Additional Context: ${additionalContext || 'None'}
+
+Return JSON with:
+{
+  "workflow_stages": ["string"],
+  "outcome_measures": ["string"],
+  "operational_constraints": ["string"],
+  "data_capture_priorities": ["string"]
+}`;
+
+    const agentCreativePrompt = (contextText, domainResearchText, programSpecificsText) => `
+# CHAMELEON PROTOCOL: AGENT 4 - CREATIVE DEVELOPMENT
+
+You are the creative development agent. Propose innovative, high-value data capture ideas,
+advanced analytics hooks, and longitudinal signals that go beyond statutory minimums.
+Do not invent legal text.
+
+Inputs:
+- Context Summary: ${contextText}
+- Domain Research: ${domainResearchText}
+- Program Specifics: ${programSpecificsText}
+
+Return JSON with:
+{
+  "innovative_signals": ["string"],
+  "predictive_fields": ["string"],
+  "longitudinal_tracking": ["string"],
+  "equity_inclusion_fields": ["string"]
+}`;
+
+    const agentLegalPrompt = (contextText, domainResearchText, programSpecificsText) => `
+# CHAMELEON PROTOCOL: AGENT 5 - LEGAL & COMPLIANCE CHECK
+
+You are the legal research agent. Identify compliance obligations and statutory requirements.
+Do not fabricate legal text. If unsure, state the assumption explicitly.
+
+Inputs:
+- Context Summary: ${contextText}
+- Domain Research: ${domainResearchText}
+- Program Specifics: ${programSpecificsText}
+- Region: ${region}
+
+Return JSON with:
+{
+  "legal_requirements": ["string"],
+  "data_retention_rules": ["string"],
+  "consent_requirements": ["string"],
+  "reporting_obligations": ["string"]
+}`;
+
+    const agentBestPracticePrompt = (contextText, domainResearchText, programSpecificsText, creativeText, legalText) => `
+# CHAMELEON PROTOCOL: AGENT 6 - BEST PRACTICE & QUALITY
+
+You are the quality agent. Ensure the protocol meets high-quality data collection best practice and
+adds rich observational/longitudinal tracking beyond statutory minimums.
+
+Inputs:
+- Context Summary: ${contextText}
+- Domain Research: ${domainResearchText}
+- Program Specifics: ${programSpecificsText}
+- Creative Development: ${creativeText}
+- Legal Research: ${legalText}
+
+Return JSON with:
+{
+  "quality_checks": ["string"],
+  "data_completeness_rules": ["string"],
+  "recommended_field_expansions": ["string"]
+}`;
+
+    const agentBlueprintPrompt = (contextText, domainResearchText, programSpecificsText, creativeText, legalText, bestPracticeText) => `
+# CHAMELEON PROTOCOL: AGENT 7 - DOMAIN BLUEPRINT
+
+You are designing a module blueprint with sections and field groups. Ensure every section will have fields.
+
+Inputs:
+- Program Name: ${PROGRAM_NAME}
+- Region: ${region}
+- Service Types: ${SERVICE_TYPES}
+- Context Summary: ${contextText}
+- Domain Research: ${domainResearchText}
+- Program Specifics: ${programSpecificsText}
+- Creative Development: ${creativeText}
+- Legal Research: ${legalText}
+- Best Practice Checks: ${bestPracticeText}
+
+Return JSON with:
+{
+  "domains": [
+    {
+      "domain_title": "string",
+      "domain_id": "string",
+      "sections": [
+        {
+          "section_title": "string",
+          "section_id": "string",
+          "field_group_summary": "string"
+        }
+      ]
+    }
+  ]
+}`;
+
+    const agentFieldPrompt = (contextText, domainResearchText, programSpecificsText, creativeText, legalText, bestPracticeText, blueprintText) => `
+# CHAMELEON PROTOCOL: AGENT 8 - FIELD SPECIFICATION
+
+You are specifying fields and rules. Provide an exhaustive set of fields per domain and per section.
+No domain or section may have zero fields. Minimum 12 fields per domain. Every field_id must map to a defined field.
+
+Inputs:
+- Program Name: ${PROGRAM_NAME}
+- Region: ${region}
+- Service Types: ${SERVICE_TYPES}
+- Blueprint: ${blueprintText}
+- Context Summary: ${contextText}
+- Domain Research: ${domainResearchText}
+- Program Specifics: ${programSpecificsText}
+- Creative Development: ${creativeText}
+- Legal Research: ${legalText}
+- Best Practice Checks: ${bestPracticeText}
+
+Return JSON with:
+{
+  "domains": [
+    {
+      "domain_id": "string",
+      "fields": [
+        { "id": "string", "label": "string", "type": "string", "options": ["string"], "default_value": "string", "is_identity_field": boolean }
+      ],
+      "sections": [
+        { "id": "string", "title": "string", "description": "string", "field_ids": ["string"] }
+      ],
+      "governance_rules": [{ "description": "string" }]
+    }
+  ]
+}`;
+
+    const agentFinalReviewPrompt = (contextText, domainResearchText, programSpecificsText, creativeText, legalText, bestPracticeText, blueprintText, fieldText) => `
+# CHAMELEON PROTOCOL: AGENT 9 - FINAL REVIEW
+
+You are the finalization agent. Check that the blueprint and fields are complete and consistent,
+and enumerate any MUST-HAVE checks to enforce (no empty sections, exhaustive fields, alignment with legal obligations).
+
+Inputs:
+- Context Summary: ${contextText}
+- Domain Research: ${domainResearchText}
+- Program Specifics: ${programSpecificsText}
+- Creative Development: ${creativeText}
+- Legal Research: ${legalText}
+- Best Practice Checks: ${bestPracticeText}
+- Blueprint: ${blueprintText}
+- Field Spec: ${fieldText}
+
+Return JSON with:
+{
+  "final_checks": ["string"],
+  "risk_gaps": ["string"],
+  "minimum_field_requirements": ["string"]
+}`;
+
+    const agentState = await runLangGraphManifest({
+      model,
+      prompts: {
+        context: agentResearchPrompt,
+        domainResearch: agentDomainResearchPrompt,
+        programSpecifics: agentProgramSpecificsPrompt,
+        creativeDevelopment: agentCreativePrompt,
+        legalResearch: agentLegalPrompt,
+        bestPractice: agentBestPracticePrompt,
+        blueprint: agentBlueprintPrompt,
+        fields: agentFieldPrompt,
+        finalReview: agentFinalReviewPrompt
+      },
+      onStatus: (statusPayload) => {
+        if (typeof statusPayload === 'string') {
+          writeEvent({ status: statusPayload });
+          return;
+        }
+        writeEvent(statusPayload);
+      },
+      onChunk: (chunk) => res.write(`data: ${JSON.stringify({ chunk })}\n\n`),
+      timeoutMs: 120000
+    });
+
+    const agentManifestPrompt = (contextText, blueprintText, fieldText) => {
+      const agentContext = [
+        '## AGENT CONTEXT SUMMARY',
+        contextText,
+        '## AGENT DOMAIN RESEARCH',
+        agentState.domainResearch || '',
+        '## AGENT PROGRAM SPECIFICS',
+        agentState.programSpecifics || '',
+        '## AGENT CREATIVE DEVELOPMENT',
+        agentState.creativeDevelopment || '',
+        '## AGENT LEGAL RESEARCH',
+        agentState.legalResearch || '',
+        '## AGENT BEST PRACTICE CHECKS',
+        agentState.bestPractice || '',
+        '## AGENT DOMAIN BLUEPRINT',
+        blueprintText,
+        '## AGENT FIELD SPEC',
+        fieldText,
+        '## AGENT FINAL REVIEW',
+        agentState.finalReview || ''
+      ].join('\n');
+
+      return buildManifestPrompt({
+        domains,
+        region,
+        currency,
+        locale,
+        researchContext: `${researchContext || ''}\n\n${agentContext}`,
+        existingManifest: null,
+        mode: 'CREATE',
+        projectName,
+        fundingBody,
+        additionalContext
+      });
+    };
+
+    writeEvent({
+      status: 'agent:manifest-assembly',
+      detail: 'Assembling final manifest with buildManifestPrompt. Waiting for model response...',
+      prompt: finalPrompt
+    });
+    const finalPrompt = agentManifestPrompt(
+      agentState.contextSummary,
+      agentState.blueprint,
+      agentState.fieldSpec
+    );
+    const manifestResult = await model.generateContent(finalPrompt);
+    const manifestText = manifestResult.response.text();
+    writeEvent({
+      status: 'agent:manifest-assembly',
+      detail: `Manifest assembly response received (${manifestText.length} chars).`
+    });
+    res.write(`data: ${JSON.stringify({ chunk: manifestText })}\n\n`);
+
+    const isValidManifest = (manifest) => {
+      if (!manifest || typeof manifest.id !== 'string' || !manifest.config || typeof manifest.version !== 'string') {
+        return false;
+      }
+      if (!Array.isArray(manifest.domains) || manifest.domains.length === 0) {
+        return false;
+      }
+      return manifest.domains.every((domain) => {
+        if (!domain || !Array.isArray(domain.fields) || domain.fields.length === 0) {
+          return false;
+        }
+        if (!Array.isArray(domain.sections) || domain.sections.length === 0) {
+          return false;
+        }
+        const fieldIdSet = new Set(domain.fields.map((field) => field.id));
+        return domain.sections.every((section) => {
+          if (!Array.isArray(section.field_ids) || section.field_ids.length === 0) {
+            return false;
+          }
+          return section.field_ids.every((fieldId) => fieldIdSet.has(fieldId));
+        });
+      });
+    };
+
+    try {
+      const jsonStr = extractJSON(manifestText);
+      let manifest = JSON.parse(jsonStr);
+
+      if (!isValidManifest(manifest)) {
+        writeEvent({
+          status: 'agent:repair-manifest',
+          detail: 'Validation failed. Running repair pass with strict schema rules.',
+          prompt: repairPrompt
+        });
+        const repairPrompt = `
+# CHAMELEON PROTOCOL: MANIFEST REPAIR
+
+The previous output was not a valid manifest. Convert it to the exact manifest schema below.
+Return ONLY valid JSON. No markdown. Ensure every domain has at least 12 fields and every section has at least 1 field_id.
+Every field_id must match an existing field in that domain.
+
+Schema:
+{
+  "id": "string",
+  "version": "1.0",
+  "compiled_at": "${new Date().toISOString()}",
+  "config": { "currency": "${currency}", "locale": "${locale}", "theme": "modern", "region": "${region}" },
+  "domains": [{
+    "id": "string",
+    "title": "string",
+    "sections": [{ "id": "string", "title": "string", "description": "string", "field_ids": ["string"] }],
+    "fields": [{ "id": "string", "label": "string", "type": "string", "options": ["string"], "default_value": "string", "is_identity_field": boolean, "ui_config": { "grid_span": 1|2, "help_text": "string" } }],
+    "research_artifacts": [{ "id": "string", "source": "string", "title": "string", "url": "string", "content_summary": "string", "cached_content": "string", "tags": ["string"] }],
+    "governance_rules": [{ "description": "string" }],
+    "subject_identifier_field": "string"
+  }],
+  "library": { "CITATION_ID": { "act_name": "string", "section_title": "string", "content": "string", "analysis": "string" } }
+}
+
+Previous output:
+${manifestText}
+`;
+        const repairResult = await model.generateContent(repairPrompt);
+        const repairText = repairResult.response.text();
+        const repairJsonStr = extractJSON(repairText);
+        manifest = JSON.parse(repairJsonStr);
+      }
+
+      if (!isValidManifest(manifest)) {
+        throw new Error('Manifest missing required schema fields');
+      }
+
+      const improvementPrompt = `
+# CHAMELEON PROTOCOL: IMPROVEMENT AGENT
+
+You are the improvement agent. Provide actionable refinements to increase data quality, completeness,
+and compliance coverage. Focus on missing fields, weak sections, and research gaps. No code changes.
+
+Return ONLY JSON:
+{
+  "summary": "string",
+  "critical_gaps": ["string"],
+  "field_expansions": ["string"],
+  "section_risks": ["string"],
+  "research_to_add": ["string"],
+  "quality_checks": ["string"]
+}
+
+Manifest JSON:
+${JSON.stringify(manifest, null, 2)}
+`;
+
+      let improvementParsed = null;
+      try {
+        writeEvent({
+          status: 'agent:improvement',
+          detail: 'Running improvement agent to generate quality recommendations.',
+          prompt: improvementPrompt
+        });
+
+        const improvementResult = await model.generateContent(improvementPrompt);
+        const improvementText = improvementResult.response.text();
+        res.write(`data: ${JSON.stringify({ chunk: improvementText })}\n\n`);
+
+        try {
+          const improvementJson = extractJSON(improvementText);
+          improvementParsed = JSON.parse(improvementJson);
+        } catch (parseError) {
+          improvementParsed = null;
+        }
+
+        await AgentImprovement.create({
+          run_id: runId,
+          manifest_id: manifest.id,
+          stage: 'improvement',
+          prompt: improvementPrompt,
+          response_text: improvementText,
+          parsed: improvementParsed,
+          notes: improvementParsed ? 'parsed' : 'raw'
+        });
+      } catch (improvementError) {
+        writeEvent({
+          status: 'agent:improvement',
+          detail: `Improvement agent failed: ${improvementError.message}`
+        });
+      }
+
+      res.write(`data: ${JSON.stringify({ done: true, manifest, improvements: improvementParsed })}\n\n`);
+    } catch (parseError) {
+      res.write(`data: ${JSON.stringify({ done: true, rawText: manifestText, parseError: parseError.message })}\n\n`);
+    }
+
+    res.end();
+
+    await logAudit({
+      userId: req.user?.id || 'anonymous',
+      entityType: 'manifest',
+      entityId: 'generate-agent',
+      action: 'MANIFEST_GENERATE_AGENT',
+      metadata: { 
+        domains,
+        region,
+        responseLength: manifestText.length
+      }
+    });
+  } catch (error) {
+    console.error('Manifest agent error:', error);
+    res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+    res.end();
+  }
+});
+
+/**
  * Build the manifest generation prompt
  */
 function buildManifestPrompt({ domains, region, currency, locale, researchContext, existingManifest, mode, projectName, fundingBody, additionalContext }) {
@@ -244,34 +818,51 @@ function buildManifestPrompt({ domains, region, currency, locale, researchContex
   const timestamp = new Date().toISOString();
 
   const basePrompt = `
-# CHAMELEON PROTOCOL: DEEP LEGISLATIVE RESEARCH AGENT
+# CHAMELEON PROTOCOL: EVIDENCE-DRIVEN DATA COLLECTION DESIGNER (GENERIC)
 
-## YOUR ROLE
-You are a Legislative Research Agent. Conduct exhaustive deep research on a specific health/community program and compile ALL requirements.
+## ROLE
+You design **best-practice data collection fields** for ANY program/domain.
+Your output must be operationally useful and grounded in evidence.
 
-## INPUT PROVIDED
-- **Program Name:** ${PROGRAM_NAME}
-- **Location:** ${region}
-- **Service Type(s):** ${SERVICE_TYPES}
-- **Funding/Org:** ${fundingBody || 'General'}
-- **Context:** ${additionalContext || 'None'}
+## INPUTS
+- Program Name: ${PROGRAM_NAME}
+- Region/Jurisdiction: ${region}
+- Domain(s): ${SERVICE_TYPES}
+- Funding/Org Context: ${fundingBody || 'General'}
+- Additional Context: ${additionalContext || 'None'}
 
-${researchContext ? `## RESEARCH CONTEXT\n${researchContext}\n` : ''}
+## EVIDENCE PACK (if provided)
+${researchContext ? `### Research Context (authoritative excerpts / notes)\n${researchContext}\n` : `### Research Context\nNone provided.\n`}
 
-## RESEARCH METHODOLOGY
-1. **Identification:** Official service models.
-2. **Framework Discovery:** Acts, Regulations, Standards.
-3. **Compliance Extraction:** Data fields, Reporting triggers.
+## NON-NEGOTIABLE RULES
+1) **No pretending to browse.** If evidence is missing, you must say so via governance_rules and create fields as best-practice inferred (see rule 4).
+2) **No fabricated legislation text.** Do not invent quotes or “full text”.
+3) Every field MUST have a purpose:
+   - Put a short justification in ui_config.help_text:
+     - why collected
+     - used for (operations | compliance | safety/risk | payments | reporting | analytics | audit)
+     - sensitivity note if personal/financial/safety-critical
+4) Evidence tagging:
+   - If the field is grounded in evidence from the evidence pack, set section_citation to a CITATION_ID in library.
+   - If you must infer (because evidence pack is incomplete), set section_citation to "BEST_PRACTICE_INFERRED".
+   - Keep inferred fields <= 25% of total.
+5) Do NOT bloat with duplicates. Prefer normalized fields that can be reused across sections.
 
-## IMPORTANT: FILE PERSISTENCE & FULL TEXT EXTRACTION
+## DESIGN METHOD (DO THIS IN YOUR HEAD BEFORE OUTPUT)
+A) Produce an OPERATING MODEL in your mind for the program:
+   - who does what, with what assets, moving what, where, under what constraints, for what outcomes
+B) Identify core ENTITIES:
+   - parties/roles, assets, locations, items/materials, transactions/events, documents, finance
+C) Identify LIFECYCLE STAGES for the main transaction:
+   - request/intake → plan → approve → execute → reconcile → close → report/audit
+D) Generate sections + fields based on A–C + evidence pack.
 
-For every relevant document (Act, Regulation, Standard) you find, you MUST:
+## COVERAGE TARGETS (QUALITY OVER FILLER)
+For EACH domain:
+- Create 8–14 sections.
+- Average 8–15 fields per section.
+- If the domain is operationally complex (logistics, healthcare, finance, construction, utilities, education, etc.), target 100+ fields.
 
-1. **Extract the FULL TEXT** (or as much as possible, e.g., 50+ key sections) into the "cached_content" field. Do NOT just summarize.
-2. We want to use this text for RAG (Retrieval Augmented Generation) later, so the more raw text you preserve, the better.
-3. Log the action as: "[DOWNLOAD] Saving <filename> ..."
-
-## OUTPUT JSON SCHEMA
 
 {
   "id": "uuid",

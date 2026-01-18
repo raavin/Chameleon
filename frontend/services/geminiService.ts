@@ -6,66 +6,18 @@
  */
 
 import { Manifest } from "../types";
-import { DB } from "./dbService";
-
-// Load all research files at build time for context
-const researchFiles = import.meta.glob('../research/*.txt', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+import { BuildContext, extractManifestFromText, getResearchBundle } from "./geminiShared";
+import { compileManifestAgent } from "./geminiAgentService";
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
+const USE_LANGGRAPH_AGENT = true;
 
-/**
- * Get research context from local files
- */
-function getResearchContext(domains: string[], onLog?: (msg: string) => void): string {
-  let context = "";
-  
-  // 1. Always include Master Executive Summary
-  const masterKey = Object.keys(researchFiles).find(k => k.toLowerCase().includes('masterexecutivesummary'));
-  if (masterKey) {
-    if (onLog) onLog(`\n[SCAN] Found Master Manifest: ${masterKey.split('/').pop()}`);
-    context += `\n\n## CORE PHILOSOPHICAL ALIGNMENT (THE MASTER MANIFEST)\n${researchFiles[masterKey]}\n`;
-  }
-
-  // 2. Include Domain-Specific Research
-  const loadedKeys = new Set([masterKey]);
-
-  domains.forEach(d => {
-    const domainLower = d.toLowerCase();
-    
-    Object.keys(researchFiles).forEach(path => {
-       if (loadedKeys.has(path)) return;
-       
-       const filename = path.split('/').pop()?.toLowerCase() || "";
-       const nameNoExt = filename.replace('.txt', '');
-       
-       const domainParts = domainLower.split(/[\s-_]+/).filter(w => w.length > 3);
-       const isMatch = filename.includes(domainLower) || 
-                       domainLower.includes(nameNoExt) ||
-                       domainParts.some(part => nameNoExt.includes(part));
-
-       if (isMatch) {
-          if (onLog) onLog(`\n[SCAN] Integrating Domain Research: ${filename}`);
-          context += `\n\n## DOMAIN RESEARCH: ${filename}\n${researchFiles[path]}\n`;
-          loadedKeys.add(path);
-       }
-    });
-  });
-
-  return context;
-}
-
-export interface BuildContext {
-  region: string;
-  domains: string[];
-  projectName?: string;
-  fundingBody?: string;
-  additionalContext?: string;
-}
+export type { BuildContext };
 
 /**
  * Compile a manifest using the Express backend Gemini API
  */
-export async function compileManifest(
+async function compileManifestStandard(
   ctx: BuildContext,
   onProgress?: (chunk: string) => void
 ): Promise<Manifest> {
@@ -86,7 +38,11 @@ export async function compileManifest(
   // }
 
   // 1. Get research context from local files
-  const researchContext = getResearchContext(domains, onProgress);
+  const researchBundle = getResearchBundle(domains, onProgress);
+  const researchContext = researchBundle.context;
+  if (onProgress) {
+    onProgress(`\n[SCAN] Research bundle: ${researchBundle.sources.length} file(s) loaded`);
+  }
 
   if (onProgress) {
     onProgress(`\n[SYSTEM] Connecting to AI Engine...\n`);
@@ -99,6 +55,7 @@ export async function compileManifest(
     currency: 'AUD', // Default, could be made configurable
     locale: 'en-AU',
     researchContext,
+    researchSources: researchBundle.sources,
     existingManifest: null,
     projectName,
     fundingBody,
@@ -144,6 +101,22 @@ export async function compileManifest(
             
             if (data.status) {
               if (onProgress) onProgress(`\n[SYSTEM] Mode: ${data.mode || data.status}\n`);
+              if (data.detail && onProgress) {
+                onProgress(`[DETAIL] ${data.detail}\n`);
+              }
+              if (data.prompt && onProgress) {
+                onProgress(`[PROMPT]\n${data.prompt}\n`);
+              }
+              if (data.references && onProgress) {
+                const list = data.references
+                  .map((ref: { file: string; preview?: string; chars?: number }) => {
+                    const preview = ref.preview ? ` :: ${ref.preview}` : '';
+                    const chars = typeof ref.chars === 'number' ? ` (${ref.chars} chars)` : '';
+                    return `- ${ref.file}${chars}${preview}`;
+                  })
+                  .join('\n');
+                onProgress(`[REFERENCES]\n${list}\n`);
+              }
             }
             
             if (data.chunk) {
@@ -199,29 +172,14 @@ export async function compileManifest(
   return manifest;
 }
 
-/**
- * Extract manifest JSON from text response
- */
-function extractManifestFromText(text: string): Manifest | null {
-  try {
-    // Try markdown code block
-    const jsonBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (jsonBlockMatch && jsonBlockMatch[1]) {
-      return JSON.parse(jsonBlockMatch[1]);
-    }
-
-    // Try raw JSON
-    const firstBrace = text.indexOf('{');
-    const lastBrace = text.lastIndexOf('}');
-    
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-      return JSON.parse(text.substring(firstBrace, lastBrace + 1));
-    }
-  } catch (e) {
-    console.error('Failed to extract manifest:', e);
+export async function compileManifest(
+  ctx: BuildContext,
+  onProgress?: (chunk: string) => void
+): Promise<Manifest> {
+  if (USE_LANGGRAPH_AGENT) {
+    return compileManifestAgent(ctx, onProgress);
   }
-  
-  return null;
+  return compileManifestStandard(ctx, onProgress);
 }
 
 /**

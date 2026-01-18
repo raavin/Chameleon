@@ -8,8 +8,8 @@
   ],
   "scripts": {
     "dev": "npm run dev:backend & npm run dev:frontend",
-    "dev:frontend": "npm run dev --workspace=frontend",
-    "dev:backend": "npm run dev --workspace=backend",
+    "dev:frontend": "NODE_ENV=development DEBUG=vite:* VITE_LOG_LEVEL=debug npm run dev --workspace=frontend",
+    "dev:backend": "NODE_ENV=development DEBUG=* npm run dev --workspace=backend",
     "build": "npm run build --workspace=frontend",
     "start": "npm run start --workspace=backend",
     "start:prod": "NODE_ENV=production npm run start --workspace=backend",

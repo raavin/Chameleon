@@ -9,6 +9,7 @@ import PrivacyRule from './PrivacyRule.js';
 import Consent from './Consent.js';
 import TwoKeyAction from './TwoKeyAction.js';
 import SecurityAlert from './SecurityAlert.js';
+import AgentImprovement from './AgentImprovement.js';
 
 export {
   Manifest,
@@ -20,5 +21,6 @@ export {
   PrivacyRule,
   Consent,
   TwoKeyAction,
-  SecurityAlert
+  SecurityAlert,
+  AgentImprovement
 };

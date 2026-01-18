@@ -95,6 +95,20 @@ const ManifestSchema = new mongoose.Schema({
   version: { type: String, required: true },
   compiled_at: { type: Date, required: true },
   order: { type: Number, default: 0 },
+  author: {
+    id: String,
+    name: String,
+    email: String
+  },
+  created_by: {
+    type: String,
+    index: true
+  },
+  visibility: {
+    type: String,
+    enum: ['PUBLIC', 'PRIVATE'],
+    default: 'PRIVATE'
+  },
   config: {
     currency: String,
     locale: String,

@@ -4,10 +4,12 @@ import { Manifest } from '../types';
 
 interface ManifestInspectorProps {
   manifest: Manifest;
+  onUpdateVisibility?: (visibility: 'PUBLIC' | 'PRIVATE') => void;
 }
 
-const ManifestInspector: React.FC<ManifestInspectorProps> = ({ manifest }) => {
+const ManifestInspector: React.FC<ManifestInspectorProps> = ({ manifest, onUpdateVisibility }) => {
   const primaryDomain = manifest?.domains?.[0];
+  const isPublic = manifest.visibility === 'PUBLIC' || !manifest.visibility;
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500 pb-24">
@@ -17,6 +19,21 @@ const ManifestInspector: React.FC<ManifestInspectorProps> = ({ manifest }) => {
           <p className="text-sm text-slate-400 font-bold uppercase tracking-widest mt-1">{manifest.config?.region || 'Unknown Region'} // v{manifest.version}</p>
         </div>
         <div className="flex gap-4">
+          {onUpdateVisibility && (
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                {isPublic ? 'PUBLIC' : 'PRIVATE'}
+              </span>
+              <button
+                onClick={() => onUpdateVisibility(isPublic ? 'PRIVATE' : 'PUBLIC')}
+                className="relative inline-flex h-5 w-10 items-center rounded-full border border-slate-200 bg-white transition-colors"
+                title={isPublic ? 'Make private' : 'Make public'}
+                type="button"
+              >
+                <span className={`absolute left-1 h-3 w-3 rounded-full transition-all ${isPublic ? 'translate-x-5 bg-emerald-500' : 'translate-x-0 bg-slate-400'}`} />
+              </button>
+            </div>
+          )}
           <button 
             onClick={() => {
               const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Manifest } from '../types';
+import { ClientRecord, Manifest } from '../types';
 import { DB } from '../services/dbService';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -30,6 +30,7 @@ interface LayoutProps {
   activeDomainId: string;
   setActiveDomainId: (id: string) => void;
   selectedClientId: string | null;
+  activeClient?: ClientRecord | null;
   onReset: () => void;
   archivedManifestIds: string[];
   onToggleArchive: (manifestId: string) => void;
@@ -101,7 +102,7 @@ const SortableActiveManifestItem: React.FC<{
 
 const Layout: React.FC<LayoutProps> = ({ 
   children, viewMode, setViewMode, manifests, activeManifestId, 
-  setActiveManifestId, activeDomainId, setActiveDomainId, selectedClientId, onReset,
+  setActiveManifestId, activeDomainId, setActiveDomainId, selectedClientId, activeClient, onReset,
   archivedManifestIds, onToggleArchive, archivedArtifactIds, onToggleArchiveArtifact, onDeleteManifest,
   onReorderManifests
 }) => {
@@ -114,6 +115,7 @@ const Layout: React.FC<LayoutProps> = ({
   const [modulesExpanded, setModulesExpanded] = useState(true);
   const [archivedExpanded, setArchivedExpanded] = useState(false);
   const [artifactsExpanded, setArtifactsExpanded] = useState(true);
+  const [noClientWarning, setNoClientWarning] = useState(false);
 
   // Filter active vs archived manifests
   const activeManifests = manifests.filter(m => !archivedManifestIds.includes(m.id));
@@ -162,14 +164,18 @@ const Layout: React.FC<LayoutProps> = ({
   const handleActiveModulesDragEnd = (event: DragEndEvent) => {
     if (!onReorderManifests) return;
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
+    const activeId = String(active.id);
+    const overId = over ? String(over.id) : '';
+    if (!overId || activeId === overId) return;
 
-    const filteredActive = activeManifests.filter(m => m.domains && m.domains.length > 0);
-    const oldIndex = filteredActive.findIndex(m => m.id === active.id);
-    const newIndex = filteredActive.findIndex(m => m.id === over.id);
+    const filteredActive = activeManifests.filter(
+      (m): m is Manifest => Boolean(m.domains && m.domains.length > 0)
+    );
+    const oldIndex = filteredActive.findIndex(m => m.id === activeId);
+    const newIndex = filteredActive.findIndex(m => m.id === overId);
     if (oldIndex === -1 || newIndex === -1) return;
 
-    const reorderedActive = arrayMove(filteredActive, oldIndex, newIndex);
+    const reorderedActive = arrayMove<Manifest>(filteredActive, oldIndex, newIndex);
     const archivedIds = manifests
       .filter(m => archivedManifestIds.includes(m.id))
       .map(m => m.id);
@@ -177,6 +183,8 @@ const Layout: React.FC<LayoutProps> = ({
 
     onReorderManifests(nextOrderIds);
   };
+
+  const clientMetaEntries = activeClient?.metadata ? Object.entries(activeClient.metadata) : [];
 
   return (
     <div className="flex h-screen bg-slate-50 text-slate-900 font-sans">
@@ -190,6 +198,16 @@ const Layout: React.FC<LayoutProps> = ({
         <nav className="flex-1 px-4 overflow-y-auto scrollbar-hide pb-8 flex flex-col">
           {/* Top section with main navigation */}
           <div className="space-y-8">
+            <section>
+              <button
+                onClick={() => setViewMode('marketplace')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${viewMode === 'marketplace' ? 'bg-slate-900 text-white shadow-xl shadow-slate-200' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
+              >
+                <span className="text-base">🧭</span>
+                Module Marketplace
+              </button>
+            </section>
+
             {/* Client Directory - standalone at top */}
             <section>
               <button
@@ -214,6 +232,11 @@ const Layout: React.FC<LayoutProps> = ({
               </button>
               {modulesExpanded && (
                 <div className="space-y-1">
+                  {noClientWarning && (
+                    <div className="mx-2 mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-amber-700">
+                      No active client selected. Create or select a client first.
+                    </div>
+                  )}
                   {activeManifests.length === 0 ? (
                     <p className="px-4 text-xs text-slate-400 italic">No protocols deployed</p>
                   ) : (
@@ -233,8 +256,15 @@ const Layout: React.FC<LayoutProps> = ({
                             isActive={activeManifestId === m.id}
                             viewMode={viewMode}
                             onSelect={() => {
+                              const domainId = m.domains[0]?.id || '';
+                              const isClientModule = domainId === 'client_profile';
+                              if (!selectedClientId && !isClientModule) {
+                                setNoClientWarning(true);
+                                return;
+                              }
+                              setNoClientWarning(false);
                               setActiveManifestId(m.id);
-                              setActiveDomainId(m.domains[0]?.id || '');
+                              setActiveDomainId(domainId);
                               setViewMode('intake');
                             }}
                             onArchive={(e) => {
@@ -254,17 +284,8 @@ const Layout: React.FC<LayoutProps> = ({
           {/* Spacer to push bottom section down */}
           <div className="flex-1" />
 
-          {/* Bottom section - Deploy, Artifacts, Archived */}
+          {/* Bottom section - Artifacts, Archived */}
           <div className="space-y-4 pt-4 border-t border-slate-100">
-            {/* Deploy Protocol */}
-            <button
-              onClick={() => setViewMode('home')}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${viewMode === 'home' ? 'bg-slate-900 text-white shadow-xl shadow-slate-200' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
-            >
-              <span className="text-base">⚡</span>
-              Deploy Protocol
-            </button>
-
             {/* System Artifacts */}
             <section>
               <button 
@@ -423,7 +444,7 @@ const Layout: React.FC<LayoutProps> = ({
 
       {/* Main Area */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-12 z-10">
+        <header className="bg-white border-b border-slate-200 flex items-center justify-between px-12 py-4 z-10">
           <div className="flex items-center gap-6">
             <h2 className="text-xl font-bold text-slate-900 italic tracking-tight">
               {viewMode === 'directory' ? 'Global Directory' : 
@@ -434,9 +455,25 @@ const Layout: React.FC<LayoutProps> = ({
           </div>
           <div className="flex items-center gap-4">
              {selectedClientId && (
-               <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-lg">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                  <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Active Context: {selectedClientId.slice(0, 8)}...</span>
+               <div className="flex items-start gap-3 px-3 py-2 bg-emerald-50 border border-emerald-100 rounded-lg">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5"></span>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Active Context</p>
+                    <p className="text-xs font-black text-emerald-900">{activeClient?.name || 'Unknown Client'}</p>
+                    <p className="text-[10px] text-emerald-700 font-bold">ID: {selectedClientId}</p>
+                    {clientMetaEntries.length > 0 ? (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[9px] text-emerald-800 font-semibold">
+                        {clientMetaEntries.map(([key, value]) => (
+                          <div key={key} className="truncate">
+                            <span className="uppercase tracking-widest text-emerald-600">{key}:</span>{' '}
+                            {typeof value === 'string' ? value : JSON.stringify(value)}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[9px] text-emerald-600 font-semibold">No client metadata loaded.</p>
+                    )}
+                  </div>
                </div>
              )}
              <div className="flex -space-x-2">

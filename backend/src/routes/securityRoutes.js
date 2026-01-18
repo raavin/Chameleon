@@ -107,10 +107,10 @@ router.post('/alerts/:id/resolve', requireRole('ADMIN', 'SUPERVISOR'), async (re
       return res.status(400).json({ error: 'Alert already resolved' });
     }
     
-    await alert.resolve(req.user.userId, notes, is_false_positive);
+    await alert.resolve(req.user.id, notes, is_false_positive);
     
     await logAudit({
-      userId: req.user.userId,
+      userId: req.user.id,
       entityType: 'security_alert',
       entityId: alert.id,
       action: 'ALERT_RESOLVED',
@@ -133,7 +133,7 @@ router.post('/sentinel/run', requireRole('ADMIN'), async (req, res) => {
     const results = await runSentinelChecks();
     
     await logAudit({
-      userId: req.user.userId,
+      userId: req.user.id,
       entityType: 'sentinel',
       entityId: 'manual_run',
       action: 'SENTINEL_MANUAL_RUN',
@@ -161,7 +161,7 @@ router.post('/freeze/:userId', requireRole('ADMIN'), async (req, res) => {
     }
     
     // Can't freeze yourself
-    if (userId === req.user.userId) {
+    if (userId === req.user.id) {
       return res.status(400).json({ error: 'Cannot freeze your own account' });
     }
     
@@ -169,7 +169,7 @@ router.post('/freeze/:userId', requireRole('ADMIN'), async (req, res) => {
     
     if (success) {
       await logAudit({
-        userId: req.user.userId,
+        userId: req.user.id,
         entityType: 'user',
         entityId: userId,
         action: 'USER_FROZEN',

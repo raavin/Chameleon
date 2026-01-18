@@ -85,14 +85,14 @@ router.post('/', requireAuth, async (req, res) => {
       purpose,
       purpose_code: purpose_code || 'OTHER',
       expires_at: expires_at ? new Date(expires_at) : null,
-      created_by: req.user.userId
+      created_by: req.user.id
     });
     
     await consent.save();
     
     // Audit log
     await logAudit({
-      userId: req.user.userId,
+      userId: req.user.id,
       entityType: 'consent',
       entityId: consent.id,
       action: 'CONSENT_GRANTED',
@@ -130,11 +130,11 @@ router.delete('/:id', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Consent already revoked' });
     }
     
-    await consent.revoke(req.user.userId, reason || 'User requested revocation');
+    await consent.revoke(req.user.id, reason || 'User requested revocation');
     
     // Audit log
     await logAudit({
-      userId: req.user.userId,
+      userId: req.user.id,
       entityType: 'consent',
       entityId: consent.id,
       action: 'CONSENT_REVOKED',
@@ -170,7 +170,7 @@ router.post('/check', requireAuth, async (req, res) => {
     }
     
     const access = await Consent.checkAccess({
-      userId: req.user.userId,
+      userId: req.user.id,
       userRole: req.user.role,
       identityKey: identity_key,
       submissionId: submission_id,
@@ -194,7 +194,7 @@ router.get('/my-access', requireAuth, async (req, res) => {
   try {
     const consents = await Consent.find({
       $or: [
-        { 'granted_to.user_id': req.user.userId },
+        { 'granted_to.user_id': req.user.id },
         { 'granted_to.role': req.user.role }
       ],
       is_revoked: false

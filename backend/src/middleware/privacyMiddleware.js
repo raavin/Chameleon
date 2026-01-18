@@ -125,7 +125,7 @@ export function applyPrivacyFilter(getManifest) {
           const manifest = await getManifest(data.manifest_id);
           const filtered = await filterByPrivacy(
             data,
-            req.user.userId,
+            req.user.id,
             req.user.role,
             manifest
           );
@@ -133,7 +133,7 @@ export function applyPrivacyFilter(getManifest) {
           // Log if any fields were redacted
           if (filtered._privacy?.redactedFields?.length > 0) {
             await logAudit({
-              userId: req.user.userId,
+              userId: req.user.id,
               entityType: 'submission',
               entityId: data.id,
               action: 'ACCESS_FILTERED',
@@ -152,7 +152,7 @@ export function applyPrivacyFilter(getManifest) {
           const filtered = await Promise.all(
             data.map(async (sub) => {
               const manifest = await getManifest(sub.manifest_id);
-              return filterByPrivacy(sub, req.user.userId, req.user.role, manifest);
+              return filterByPrivacy(sub, req.user.id, req.user.role, manifest);
             })
           );
           return originalJson(filtered);

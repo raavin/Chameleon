@@ -892,3 +892,24 @@ This is NOT a greenfield project. You have a working MVP with:
 3. Report your findings before proceeding to Phase 1
 
 **Good luck building The Chameleon Protocol! 🦎**
+
+---
+
+## Marketplace UX Fixes
+- [x] I can only see 4 modules in the marketplace when there are 5. I should have access to all of the modules which should be paginated, 4 to a page. use a standard pagination solution that shows the pagination navigator at the bottom.
+- [x] If I archive one of the my active modules, I can see the new 5th one, but I can't search for it by domain, location or keyword. I should see all of the public modules.
+- [x] I should see the field names in a list on the card or at least some and +5 or whatever.
+- [x] The domain on the card just has the title repeated. Can we get the actual domains.
+- [x] The author name should be on the card and marked Unknown if it doesn't exist.
+
+Completed: 2026-01-11 20:44 AEDT
+
+## Visibility Toggle + Creator Metadata
+- [x] There is no toggle switch. When I create a new module, when it is saved, it should be saved with my user id. There should be a toggle switch next to the word public. If I switch the toggle, the word PUBLIC should change to PRIVATE and vioe versa and the new state shoould be saved to the database.
+
+Completed: 2026-01-11 20:56 AEDT
+
+## Intake Requires Active Client
+- [x] If there is no active client and I click an active module, I should geta warning message that there isnt an active client and to select one. The 'finalize' button at the end of the form should be greyed an inactive until one is selected and active.
+
+Completed: 2026-01-11 21:29 AEDT

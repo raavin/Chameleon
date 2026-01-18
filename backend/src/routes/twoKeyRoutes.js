@@ -45,8 +45,8 @@ router.post('/initiate', async (req, res) => {
     const actionId = uuidv4();
     const signature = TwoKeyAction.generateSignature(
       actionId, 
-      req.user.userId, 
-      process.env.JWT_SECRET // Use JWT secret as user secret for now
+      req.user.id, 
+      process.env.SESSION_SECRET || 'chameleon-dev-session-secret'
     );
     
     const action = new TwoKeyAction({
@@ -56,7 +56,7 @@ router.post('/initiate', async (req, res) => {
       target: target || {},
       payload: payload || {},
       requester: {
-        user_id: req.user.userId,
+        user_id: req.user.id,
         signature,
         signed_at: new Date()
       },
@@ -70,7 +70,7 @@ router.post('/initiate', async (req, res) => {
     
     // Audit log
     await logAudit({
-      userId: req.user.userId,
+      userId: req.user.id,
       entityType: 'two_key_action',
       entityId: action.id,
       action: 'TWO_KEY_INITIATED',
@@ -95,7 +95,7 @@ router.post('/initiate', async (req, res) => {
 router.get('/pending', async (req, res) => {
   try {
     const actions = await TwoKeyAction.getPendingForWitness(
-      req.user.userId,
+      req.user.id,
       req.user.role
     );
     
@@ -112,7 +112,7 @@ router.get('/pending', async (req, res) => {
  */
 router.get('/my-actions', async (req, res) => {
   try {
-    const actions = await TwoKeyAction.getByRequester(req.user.userId);
+    const actions = await TwoKeyAction.getByRequester(req.user.id);
     res.json(actions);
   } catch (err) {
     console.error('Get my actions error:', err);
@@ -155,7 +155,7 @@ router.post('/approve/:id', async (req, res) => {
     }
     
     // Check if user can witness
-    if (action.requester.user_id === req.user.userId) {
+    if (action.requester.user_id === req.user.id) {
       return res.status(403).json({ 
         error: 'Cannot approve your own action' 
       });
@@ -175,15 +175,15 @@ router.post('/approve/:id', async (req, res) => {
     // Generate witness signature
     const signature = TwoKeyAction.generateSignature(
       id,
-      req.user.userId,
+      req.user.id,
       process.env.JWT_SECRET
     );
     
-    await action.approve(req.user.userId, signature, comment);
+    await action.approve(req.user.id, signature, comment);
     
     // Audit log
     await logAudit({
-      userId: req.user.userId,
+      userId: req.user.id,
       entityType: 'two_key_action',
       entityId: action.id,
       action: 'TWO_KEY_APPROVED',
@@ -220,11 +220,11 @@ router.post('/reject/:id', async (req, res) => {
       return res.status(400).json({ error: 'Rejection reason is required' });
     }
     
-    await action.reject(req.user.userId, reason);
+    await action.reject(req.user.id, reason);
     
     // Audit log
     await logAudit({
-      userId: req.user.userId,
+      userId: req.user.id,
       entityType: 'two_key_action',
       entityId: action.id,
       action: 'TWO_KEY_REJECTED',
@@ -256,7 +256,7 @@ router.post('/cancel/:id', async (req, res) => {
       return res.status(404).json({ error: 'Action not found' });
     }
     
-    if (action.requester.user_id !== req.user.userId) {
+    if (action.requester.user_id !== req.user.id) {
       return res.status(403).json({ error: 'Can only cancel your own actions' });
     }
     
@@ -269,7 +269,7 @@ router.post('/cancel/:id', async (req, res) => {
     
     // Audit log
     await logAudit({
-      userId: req.user.userId,
+      userId: req.user.id,
       entityType: 'two_key_action',
       entityId: action.id,
       action: 'TWO_KEY_CANCELLED',
@@ -315,7 +315,7 @@ router.post('/execute/:id', requireRole('ADMIN'), async (req, res) => {
     
     // Audit log
     await logAudit({
-      userId: req.user.userId,
+      userId: req.user.id,
       entityType: 'two_key_action',
       entityId: action.id,
       action: 'TWO_KEY_EXECUTED',

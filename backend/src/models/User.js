@@ -1,14 +1,11 @@
 /**
  * User Model - Chameleon Protocol
  * 
- * Stores user accounts with bcrypt-hashed passwords.
- * Supports offline-first auth via JWT tokens.
+ * Stores user accounts with argon2id-hashed passwords.
  */
 
 import mongoose from 'mongoose';
-import bcrypt from 'bcryptjs';
-
-const SALT_ROUNDS = 12;
+import argon2 from 'argon2';
 
 const userSchema = new mongoose.Schema({
   id: {
@@ -49,6 +46,11 @@ const userSchema = new mongoose.Schema({
   },
   last_login: {
     type: Date
+  },
+  preferences: {
+    manifest_order: [String],
+    archived_manifest_ids: [String],
+    archived_artifact_ids: [String]
   }
 }, {
   timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
@@ -64,7 +66,9 @@ userSchema.pre('save', async function(next) {
   }
   
   try {
-    this.password_hash = await bcrypt.hash(this.password_hash, SALT_ROUNDS);
+    this.password_hash = await argon2.hash(this.password_hash, {
+      type: argon2.argon2id
+    });
     next();
   } catch (error) {
     next(error);
@@ -75,7 +79,7 @@ userSchema.pre('save', async function(next) {
  * Verify password
  */
 userSchema.methods.verifyPassword = async function(password) {
-  return bcrypt.compare(password, this.password_hash);
+  return argon2.verify(this.password_hash, password);
 };
 
 /**
@@ -90,7 +94,12 @@ userSchema.methods.toPublicJSON = function() {
     domain_permissions: this.domain_permissions,
     is_active: this.is_active,
     last_login: this.last_login,
-    created_at: this.created_at
+    created_at: this.created_at,
+    preferences: this.preferences || {
+      manifest_order: [],
+      archived_manifest_ids: [],
+      archived_artifact_ids: []
+    }
   };
 };
 
@@ -114,7 +123,12 @@ userSchema.statics.createUser = async function(userData) {
     name: userData.name,
     role: userData.role || 'WORKER',
     domain_permissions: userData.domain_permissions || [],
-    is_active: true
+    is_active: true,
+    preferences: userData.preferences || {
+      manifest_order: [],
+      archived_manifest_ids: [],
+      archived_artifact_ids: []
+    }
   });
   
   return user.save();

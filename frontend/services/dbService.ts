@@ -315,17 +315,24 @@ export const DB = {
   async updateClientFromSubmission(sub: Submission) {
     let client = await this.getClientDocument(sub.subject_id);
     
+    const fromProfile = sub.domain_id === 'client_profile';
+    const derivedName =
+      sub.data.full_name ||
+      sub.data.name ||
+      [sub.data.given_name, sub.data.family_name].filter(Boolean).join(' ') ||
+      'Resolved Identity';
+
     if (!client) {
       client = {
         id: sub.subject_id,
-        name: sub.data.full_name || sub.data.name || "Resolved Identity",
+        name: derivedName,
         metadata: {},
         submissions: []
       };
     }
     
-    if (sub.data.full_name || sub.data.name) {
-      client.name = sub.data.full_name || sub.data.name;
+    if (fromProfile) {
+      client.name = derivedName;
     }
     
     const previousSubmissions = Array.isArray(client.submissions) ? client.submissions : [];

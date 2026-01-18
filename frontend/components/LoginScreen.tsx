@@ -184,7 +184,7 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
 
         {/* Offline Notice */}
         <p style={styles.offlineNote}>
-          🔒 Your credentials are stored securely. Authentication works offline after initial login.
+          🔒 Your session is stored securely. Sign-in requires server access.
         </p>
       </div>
     </div>
