@@ -7,22 +7,27 @@ import mongoose from 'mongoose';
 const FieldSchema = new mongoose.Schema({
   id: { type: String, required: true },
   label: { type: String, required: true },
-  type: { 
-    type: String, 
+  type: {
+    type: String,
     required: true,
     // Flexible enum to handle various AI outputs
-    enum: ['text', 'string', 'number', 'photo', 'bool', 'boolean', 'select', 'date', 'textarea', 'relationship', 'map', 'file', 'multiselect', 'tel', 'email', 'checkbox']
+    enum: ['text', 'string', 'number', 'photo', 'bool', 'boolean', 'select', 'date', 'textarea', 'relationship', 'map', 'file', 'multiselect', 'tel', 'email', 'checkbox', 'time', 'datetime', 'currency', 'url', 'phone', 'address', 'signature', 'rating', 'slider', 'color', 'hidden']
   },
   placeholder: String,
-  options: [String],
+  // Options can be simple strings or {label, value} objects
+  options: [mongoose.Schema.Types.Mixed],
   default_value: mongoose.Schema.Types.Mixed,
   section_citation: String,        // GOLD: Links to library entry
   research_node_id: String,
   is_identity_field: Boolean,      // GOLD: Core identifier marking
+  required: Boolean,
+  validation: mongoose.Schema.Types.Mixed,
   ui_config: {
-    grid_span: { type: Number, enum: [1, 2] },
+    grid_span: { type: Number, default: 1 },  // Flexible grid span
     help_text: String,             // GOLD: Contextual guidance
-    extrapolated_from: String
+    extrapolated_from: String,
+    display_format: String,
+    conditional_display: mongoose.Schema.Types.Mixed
   }
 }, { _id: false });
 
@@ -109,13 +114,31 @@ const ManifestSchema = new mongoose.Schema({
     enum: ['PUBLIC', 'PRIVATE'],
     default: 'PRIVATE'
   },
+
+  // Module Pack reference - groups related manifests
+  module_pack_id: {
+    type: String,
+    index: true
+  },
+  module_type: {
+    type: String,
+    enum: ['standalone', 'user-management', 'client-entity', 'data-collection', 'data-views', 'communications', 'notes', 'calendar', 'tasks', 'workflow', 'reporting', 'inventory', 'assessment', 'scheduling', 'billing', 'documents', 'analytics', 'custom'],
+    default: 'standalone'
+  },
+  module_metadata: {
+    title: String,
+    description: String,
+    dependencies: [String],
+    priority: { type: Number, default: 0 },
+    tags: [String]
+  },
+
   config: {
     currency: String,
     locale: String,
     theme: { type: String, default: 'modern' },
     region: { type: String, required: true }
   },
-  order: { type: Number, default: 0 },
   domains: [DomainSchema],
   library: {                       // GOLD: Citation database
     type: Map,
@@ -136,6 +159,8 @@ const ManifestSchema = new mongoose.Schema({
 
 // Index for faster lookups (id already has unique index)
 ManifestSchema.index({ 'config.region': 1 });
+ManifestSchema.index({ module_pack_id: 1 });
+ManifestSchema.index({ module_type: 1 });
 
 const Manifest = mongoose.model('Manifest', ManifestSchema);
 

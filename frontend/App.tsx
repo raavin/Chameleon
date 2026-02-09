@@ -8,13 +8,15 @@ import Layout from './components/Layout';
 import Engine from './components/Engine';
 import CRMView from './components/CRMView';
 import ClientDashboard from './components/ClientDashboard';
-import LandingScreen from './components/LandingScreen';
+import PublicSite from './components/public/PublicSite';
 import ResearcherOverlay from './components/ResearcherOverlay';
 import ManifestInspector from './components/ManifestInspector';
 import Marketplace from './components/Marketplace';
 import { LoginScreen } from './components/LoginScreen';
 import DeploymentModal from './components/DeploymentModal';
+import ModulePackUI from './components/ModulePackUI';
 import { useAuth } from './contexts/AuthContext';
+import { useSimpleRouter } from './hooks/useSimpleRouter';
 
 export default function App() {
   const { user, isAuthenticated, checkAuth } = useAuth();
@@ -32,13 +34,14 @@ export default function App() {
   
   const [loading, setLoading] = useState(false);
   const [streamOutput, setStreamOutput] = useState<string>('');
-  const [viewMode, setViewMode] = useState<'home' | 'intake' | 'review' | 'manifest' | 'directory' | 'client_360' | 'marketplace'>('home');
+  const [viewMode, setViewMode] = useState<'intake' | 'review' | 'manifest' | 'directory' | 'client_360' | 'marketplace' | 'module_packs'>('marketplace');
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
   const [isDeploymentOpen, setIsDeploymentOpen] = useState(false);
   const manifestOrderKey = user?.preferences?.manifest_order?.join('|') || '';
+  const { path, navigate } = useSimpleRouter();
 
   const applyManifestOrder = (items: Manifest[], orderIds?: string[]) => {
     if (!orderIds || orderIds.length === 0) return items;
@@ -236,13 +239,32 @@ export default function App() {
 
   if (loading) return <ResearcherOverlay stream={streamOutput} />;
 
-  if (viewMode === 'home') return <LandingScreen onBuild={handleBuild} onEnterDirectory={() => setViewMode('directory')} />;
+  const isPublicRoute =
+    path === '/' ||
+    path.startsWith('/philosophy') ||
+    path.startsWith('/research') ||
+    path.startsWith('/factory');
 
   const activeManifest = manifests.find(m => m.id === activeManifestId);
   const activeDomain = activeManifest?.domains.find(d => d.id === activeDomainId);
 
+  if (isPublicRoute) {
+    return (
+      <PublicSite
+        path={path}
+        onNavigate={navigate}
+        onEnterCommand={() => navigate('/app')}
+      />
+    );
+  }
+
   if (!isAuthenticated) {
-    return <LoginScreen onSuccess={() => refreshData()} />;
+    return <LoginScreen onSuccess={() => { refreshData(); navigate('/app'); }} />;
+  }
+
+  if (!path.startsWith('/app')) {
+    navigate('/app');
+    return null;
   }
 
   const activeClient = selectedClientId ? clients.find(client => client.id === selectedClientId) : null;
@@ -270,7 +292,7 @@ export default function App() {
       onReorderManifests={handleReorderManifests}
       selectedClientId={selectedClientId}
       activeClient={activeClient}
-      onReset={() => setViewMode('home')}
+      onReset={() => setViewMode('marketplace')}
     >
       {viewMode === 'directory' && (
         <CRMView 
@@ -326,7 +348,36 @@ export default function App() {
         <Marketplace
           archivedManifestIds={archivedManifestIds}
           onActivateManifest={handleActivateManifest}
-          onCreateModule={() => setIsDeploymentOpen(true)}
+          onCreateModule={() => setViewMode('module_packs')}
+        />
+      )}
+
+      {viewMode === 'module_packs' && (
+        <ModulePackUI
+          availableManifests={manifests}
+          onLoadManifests={async (manifestIds) => {
+            // Load manifests from the pack into the active modules
+            for (const id of manifestIds) {
+              try {
+                const manifest = await manifestApi.getById(id);
+                if (manifest && !manifests.find(m => m.id === id)) {
+                  await DB.saveManifest(manifest);
+                }
+              } catch (err) {
+                console.error(`Failed to load manifest ${id}:`, err);
+              }
+            }
+            await refreshData();
+            setViewMode('marketplace');
+          }}
+          onClearManifests={async () => {
+            // Clear manifests that aren't in a pack
+            const unpackedManifests = manifests.filter(m => !m.module_pack_id);
+            for (const manifest of unpackedManifests) {
+              await DB.deleteManifest(manifest.id);
+            }
+            await refreshData();
+          }}
         />
       )}
 

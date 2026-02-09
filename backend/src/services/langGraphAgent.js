@@ -10,6 +10,7 @@ function withTimeout(promise, timeoutMs) {
 export async function runLangGraphManifest({
   model,
   prompts,
+  telemetry,
   onStatus,
   onChunk,
   timeoutMs = 120000
@@ -29,66 +30,51 @@ export async function runLangGraphManifest({
   const graph = new StateGraph(AgentState)
     .addNode('context_step', async () => {
       const prompt = prompts.context;
-      onStatus?.({
-        status: 'agent:context-synthesis',
-        detail: `Preparing context synthesis prompt (${prompt.length} chars). Waiting for model response...`,
-        prompt
-      });
+      telemetry?.decision('LangGraph', 'Synthesize Context', 'Aggregating input domains, region, and research into a coherent program summary.', { step: 'context_step' });
+      
       const result = await model.generateContent(prompt);
       const text = result.response.text();
-      onStatus?.({ status: 'agent:context-synthesis', detail: `Context synthesis complete (${text.length} chars).` });
+      
       onChunk?.(text);
       return { contextSummary: text };
     })
     .addNode('domain_research_step', async (state) => {
       const prompt = prompts.domainResearch(state.contextSummary);
-      onStatus?.({
-        status: 'agent:domain-research',
-        detail: `Preparing domain research prompt (${prompt.length} chars). Waiting for model response...`,
-        prompt
-      });
+      telemetry?.decision('LangGraph', 'Analyze Domain Requirements', 'Identifying specific standards and metrics for the identified program goals.', { step: 'domain_research_step' });
+
       const result = await model.generateContent(prompt);
       const text = result.response.text();
-      onStatus?.({ status: 'agent:domain-research', detail: `Domain research complete (${text.length} chars).` });
+      
       onChunk?.(text);
       return { domainResearch: text };
     })
     .addNode('program_specifics_step', async (state) => {
       const prompt = prompts.programSpecifics(state.contextSummary, state.domainResearch);
-      onStatus?.({
-        status: 'agent:program-specifics',
-        detail: `Preparing program specifics prompt (${prompt.length} chars). Waiting for model response...`,
-        prompt
-      });
+      telemetry?.decision('LangGraph', 'Define Program Specifics', 'Mapping domain requirements to concrete workflow stages and data capture priorities.', { step: 'program_specifics_step' });
+
       const result = await model.generateContent(prompt);
       const text = result.response.text();
-      onStatus?.({ status: 'agent:program-specifics', detail: `Program specifics complete (${text.length} chars).` });
+      
       onChunk?.(text);
       return { programSpecifics: text };
     })
     .addNode('creative_step', async (state) => {
       const prompt = prompts.creativeDevelopment(state.contextSummary, state.domainResearch, state.programSpecifics);
-      onStatus?.({
-        status: 'agent:creative-development',
-        detail: `Preparing creative development prompt (${prompt.length} chars). Waiting for model response...`,
-        prompt
-      });
+      telemetry?.decision('LangGraph', 'Develop Creative Signals', 'Brainstorming high-value, non-obvious data points for longitudinal tracking.', { step: 'creative_step' });
+
       const result = await model.generateContent(prompt);
       const text = result.response.text();
-      onStatus?.({ status: 'agent:creative-development', detail: `Creative development complete (${text.length} chars).` });
+      
       onChunk?.(text);
       return { creativeDevelopment: text };
     })
     .addNode('legal_step', async (state) => {
       const prompt = prompts.legalResearch(state.contextSummary, state.domainResearch, state.programSpecifics);
-      onStatus?.({
-        status: 'agent:legal-research',
-        detail: `Preparing legal research prompt (${prompt.length} chars). Waiting for model response...`,
-        prompt
-      });
+      telemetry?.decision('LangGraph', 'Verify Compliance', 'Checking planned data capture against regional regulations and consent requirements.', { step: 'legal_step' });
+
       const result = await model.generateContent(prompt);
       const text = result.response.text();
-      onStatus?.({ status: 'agent:legal-research', detail: `Legal research complete (${text.length} chars).` });
+      
       onChunk?.(text);
       return { legalResearch: text };
     })
@@ -100,14 +86,11 @@ export async function runLangGraphManifest({
         state.creativeDevelopment,
         state.legalResearch
       );
-      onStatus?.({
-        status: 'agent:best-practice',
-        detail: `Preparing best-practice prompt (${prompt.length} chars). Waiting for model response...`,
-        prompt
-      });
+      telemetry?.decision('LangGraph', 'Quality Assurance', 'Validating the protocol against data quality standards and completeness rules.', { step: 'best_practice_step' });
+
       const result = await model.generateContent(prompt);
       const text = result.response.text();
-      onStatus?.({ status: 'agent:best-practice', detail: `Best-practice checks complete (${text.length} chars).` });
+      
       onChunk?.(text);
       return { bestPractice: text };
     })
@@ -120,14 +103,11 @@ export async function runLangGraphManifest({
         state.legalResearch,
         state.bestPractice
       );
-      onStatus?.({
-        status: 'agent:domain-blueprint',
-        detail: `Preparing domain blueprint prompt (${prompt.length} chars). Waiting for model response...`,
-        prompt
-      });
+      telemetry?.decision('LangGraph', 'Design Blueprint', 'Structuring the validated requirements into a logical hierarchy of domains and sections.', { step: 'blueprint_step' });
+
       const result = await model.generateContent(prompt);
       const text = result.response.text();
-      onStatus?.({ status: 'agent:domain-blueprint', detail: `Domain blueprint complete (${text.length} chars).` });
+      
       onChunk?.(text);
       return { blueprint: text };
     })
@@ -141,14 +121,11 @@ export async function runLangGraphManifest({
         state.bestPractice,
         state.blueprint
       );
-      onStatus?.({
-        status: 'agent:field-spec',
-        detail: `Preparing field specification prompt (${prompt.length} chars). Waiting for model response...`,
-        prompt
-      });
+      telemetry?.decision('LangGraph', 'Specify Fields', 'Defining exhaustive field properties (types, options, help text) for every section.', { step: 'fields_step' });
+
       const result = await model.generateContent(prompt);
       const text = result.response.text();
-      onStatus?.({ status: 'agent:field-spec', detail: `Field specification complete (${text.length} chars).` });
+      
       onChunk?.(text);
       return { fieldSpec: text };
     })
@@ -163,14 +140,11 @@ export async function runLangGraphManifest({
         state.blueprint,
         state.fieldSpec
       );
-      onStatus?.({
-        status: 'agent:final-review',
-        detail: `Preparing final review prompt (${prompt.length} chars). Waiting for model response...`,
-        prompt
-      });
+      telemetry?.decision('LangGraph', 'Final Review', 'Performing a final consistency check and identifying any remaining risk gaps.', { step: 'final_step' });
+
       const result = await model.generateContent(prompt);
       const text = result.response.text();
-      onStatus?.({ status: 'agent:final-review', detail: `Final review complete (${text.length} chars).` });
+      
       onChunk?.(text);
       return { finalReview: text };
     })

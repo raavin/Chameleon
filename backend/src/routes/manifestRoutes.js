@@ -156,6 +156,30 @@ router.get('/:id', async (req, res) => {
 });
 
 /**
+ * GET /api/manifests/pack/:packId
+ * Get all manifests belonging to a module pack
+ */
+router.get('/pack/:packId', async (req, res) => {
+  try {
+    const manifests = await Manifest.find({
+      module_pack_id: req.params.packId
+    }).sort({ order: 1, 'module_metadata.priority': 1 });
+
+    if (manifests.length === 0) {
+      return res.status(404).json({ error: 'No manifests found for this module pack' });
+    }
+
+    res.json({
+      packId: req.params.packId,
+      count: manifests.length,
+      manifests
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /api/manifests/region/:region
  * Get active manifest for a region
  */

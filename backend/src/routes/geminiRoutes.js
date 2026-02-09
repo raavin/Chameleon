@@ -12,6 +12,8 @@ import { optionalAuth } from '../middleware/authMiddleware.js';
 import { logAudit } from '../middleware/auditMiddleware.js';
 import { runLangGraphManifest } from '../services/langGraphAgent.js';
 import AgentImprovement from '../models/AgentImprovement.js';
+import { modelSelector, TASK_TYPES } from '../utils/modelSelector.js';
+import { ResearchAgent } from '../services/researchAgent.js';
 
 const router = Router();
 
@@ -271,28 +273,33 @@ router.post('/manifest', async (req, res) => {
 /**
  * POST /api/gemini/manifest-agent
  * Agentic manifest generation using multi-step decomposition.
+ * NOW WITH DEEP RESEARCH AGENT
  */
 router.post('/manifest-agent', async (req, res) => {
+  const runId = randomUUID();
+  const telemetry = new Telemetry({ res, runId });
+  
   try {
-    const { 
-      domains, 
-      region, 
-      currency = 'USD', 
+    const {
+      domains,
+      region,
+      currency = 'USD',
       locale = 'en-US',
       researchContext = '',
       researchSources = [],
       projectName = '',
       fundingBody = '',
-      additionalContext = ''
+      additionalContext = '',
+      enableDeepResearch = true
     } = req.body;
 
-    const runId = randomUUID();
-
     if (!domains || !Array.isArray(domains) || domains.length === 0) {
+      telemetry.error('API', 'Domains array is required');
       return res.status(400).json({ error: 'Domains array is required' });
     }
 
     if (!region) {
+      telemetry.error('API', 'Region is required');
       return res.status(400).json({ error: 'Region is required' });
     }
 
@@ -300,55 +307,93 @@ router.post('/manifest-agent', async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
 
-    const writeEvent = (payload) => res.write(`data: ${JSON.stringify(payload)}\n\n`);
-
+    // We no longer need a separate writeEvent helper, we use telemetry directly
     const genAI = getGenAI();
-    const model = genAI.getGenerativeModel({ 
-      model: 'gemini-3-flash-preview',
-      generationConfig: {
-        maxOutputTokens: 65000,
-        temperature: 0.6
-      }
-    });
 
-    writeEvent({
-      status: 'agent:request-received',
-      detail: `Agent request received. Run ID: ${runId}. Domains: ${domains.join(', ')}. Region: ${region}.`,
-      run_id: runId
-    });
-    if (Array.isArray(researchSources) && researchSources.length > 0) {
-      writeEvent({
-        status: 'agent:research-sources',
-        detail: `Loaded ${researchSources.length} research file(s) from client bundle.`,
-        references: researchSources
+    telemetry.log('API', `Agent request received. Run ID: ${runId}. Domains: ${domains.join(', ')}. Region: ${region}.`, { run_id: runId });
+
+    let deepResearchKnowledge = '';
+    let deepResearchSources = [];
+
+    if (enableDeepResearch) {
+      telemetry.info('Research', 'Initializing Deep Research Agent with Gemini 3 Pro + Google Search grounding');
+
+      const researchAgent = new ResearchAgent(process.env.GEMINI_API_KEY);
+
+      for (const domain of domains) {
+        const researchResult = await researchAgent.conductDeepResearch(
+          domain,
+          region,
+          telemetry
+        );
+
+        deepResearchKnowledge += `\n\n## DEEP RESEARCH: ${domain}\n\n${researchResult.knowledge}\n`;
+        deepResearchSources.push(...researchResult.sources);
+      }
+
+      telemetry.info('Research', `Deep research complete. ${deepResearchSources.length} sources processed.`, {
+        references: deepResearchSources
       });
-    } else {
-      writeEvent({
-        status: 'agent:research-sources',
-        detail: 'No research files provided by client bundle. Using defaults.'
+    }
+
+    const combinedResearchContext = [
+      researchContext,
+      deepResearchKnowledge
+    ].filter(Boolean).join('\n\n---\n\n');
+
+    const allResearchSources = [
+      ...researchSources,
+      ...deepResearchSources
+    ];
+
+    if (allResearchSources.length > 0) {
+      telemetry.info('Research', `Total research sources: ${allResearchSources.length} (${researchSources.length} client + ${deepResearchSources.length} deep research)`, {
+        references: allResearchSources
       });
     }
 
     const isClientModule = projectName.toLowerCase().includes('client');
     if (isClientModule) {
-      const prompt = buildClientModulePrompt({ domains, region, currency, locale, additionalContext });
-      writeEvent({
-        status: 'agent:client-module',
-        detail: `Client module detected. Submitting client prompt (${prompt.length} chars).`,
-        prompt
+      const task = {
+        type: TASK_TYPES.CODE_GENERATION,
+        complexity: 'medium',
+        generationConfig: {
+          maxOutputTokens: 65000,
+          temperature: 0.6
+        }
+      };
+
+      const prompt = buildClientModulePrompt({
+        domains,
+        region,
+        currency,
+        locale,
+        additionalContext: `${additionalContext}\n\n${deepResearchKnowledge}`
       });
-      const result = await model.generateContent(prompt);
-      const text = result.response.text();
-      writeEvent({
-        status: 'agent:client-module',
-        detail: `Client module response received (${text.length} chars).`
-      });
+
+      telemetry.info('Agent', `Client module detected. Submitting client prompt (${prompt.length} chars).`, { prompt });
+
+      const text = await modelSelector.executeWithFallback(
+        genAI,
+        task,
+        async (model) => {
+          const result = await model.generateContent(prompt);
+          return result.response.text();
+        },
+        telemetry
+      );
+
+      telemetry.info('Agent', `Client module response received (${text.length} chars).`);
+      
+      // Manually send chunk for now as we didn't refactor modelSelector to stream via telemetry yet for single calls
       res.write(`data: ${JSON.stringify({ chunk: text })}\n\n`);
+      
       try {
         const jsonStr = extractJSON(text);
         const manifest = JSON.parse(jsonStr);
         res.write(`data: ${JSON.stringify({ done: true, manifest })}\n\n`);
       } catch (parseError) {
+        telemetry.error('Agent', 'JSON Parsing failed', parseError);
         res.write(`data: ${JSON.stringify({ done: true, rawText: text, parseError: parseError.message })}\n\n`);
       }
       res.end();
@@ -370,7 +415,7 @@ Input:
 - Funding/Org: ${fundingBody || 'General'}
 - Context: ${additionalContext || 'None'}
 
-${researchContext ? `Research Context:\n${researchContext}\n` : ''}
+${combinedResearchContext ? `Research Context:\n${combinedResearchContext}\n` : ''}
 
 Return JSON with:
 {
@@ -393,7 +438,7 @@ Inputs:
 - Region: ${region}
 - Service Types: ${SERVICE_TYPES}
 - Context Summary: ${contextText}
-- Research Context: ${researchContext || 'None'}
+- Research Context: ${combinedResearchContext || 'None'}
 
 Return JSON with:
 {
@@ -579,10 +624,29 @@ Return JSON with:
   "minimum_field_requirements": ["string"]
 }`;
 
+    const model = genAI.getGenerativeModel({ 
+      model: 'gemini-3-flash-preview',
+      generationConfig: {
+        maxOutputTokens: 65000,
+        temperature: 0.7
+      }
+    });
+
     const agentState = await runLangGraphManifest({
       model,
       prompts: {
-        context: agentResearchPrompt,
+        context: buildManifestPrompt({
+          domains,
+          region,
+          currency,
+          locale,
+          researchContext: combinedResearchContext || '',
+          existingManifest: null,
+          mode: 'CREATE',
+          projectName,
+          fundingBody,
+          additionalContext
+        }),
         domainResearch: agentDomainResearchPrompt,
         programSpecifics: agentProgramSpecificsPrompt,
         creativeDevelopment: agentCreativePrompt,
@@ -592,12 +656,15 @@ Return JSON with:
         fields: agentFieldPrompt,
         finalReview: agentFinalReviewPrompt
       },
+      telemetry,
       onStatus: (statusPayload) => {
+        // Redundant with telemetry, but keeping for compatibility if langGraphAgent emits raw strings
         if (typeof statusPayload === 'string') {
-          writeEvent({ status: statusPayload });
+          telemetry.info('LangGraph', statusPayload);
           return;
         }
-        writeEvent(statusPayload);
+        // If it's an object, it's likely an old format payload, we can just log it
+        telemetry.info('LangGraph', statusPayload.detail || 'Status Update', statusPayload);
       },
       onChunk: (chunk) => res.write(`data: ${JSON.stringify({ chunk })}\n\n`),
       timeoutMs: 120000
@@ -639,22 +706,18 @@ Return JSON with:
       });
     };
 
-    writeEvent({
-      status: 'agent:manifest-assembly',
-      detail: 'Assembling final manifest with buildManifestPrompt. Waiting for model response...',
-      prompt: finalPrompt
-    });
     const finalPrompt = agentManifestPrompt(
       agentState.contextSummary,
       agentState.blueprint,
       agentState.fieldSpec
     );
+    
+    telemetry.info('Agent', 'Assembling final manifest with buildManifestPrompt. Waiting for model response...', { prompt: finalPrompt });
+    
     const manifestResult = await model.generateContent(finalPrompt);
     const manifestText = manifestResult.response.text();
-    writeEvent({
-      status: 'agent:manifest-assembly',
-      detail: `Manifest assembly response received (${manifestText.length} chars).`
-    });
+    
+    telemetry.info('Agent', `Manifest assembly response received (${manifestText.length} chars).`);
     res.write(`data: ${JSON.stringify({ chunk: manifestText })}\n\n`);
 
     const isValidManifest = (manifest) => {
@@ -686,11 +749,6 @@ Return JSON with:
       let manifest = JSON.parse(jsonStr);
 
       if (!isValidManifest(manifest)) {
-        writeEvent({
-          status: 'agent:repair-manifest',
-          detail: 'Validation failed. Running repair pass with strict schema rules.',
-          prompt: repairPrompt
-        });
         const repairPrompt = `
 # CHAMELEON PROTOCOL: MANIFEST REPAIR
 
@@ -719,6 +777,8 @@ Schema:
 Previous output:
 ${manifestText}
 `;
+        telemetry.warn('Agent', 'Validation failed. Running repair pass with strict schema rules.', { prompt: repairPrompt });
+        
         const repairResult = await model.generateContent(repairPrompt);
         const repairText = repairResult.response.text();
         const repairJsonStr = extractJSON(repairText);
@@ -751,11 +811,7 @@ ${JSON.stringify(manifest, null, 2)}
 
       let improvementParsed = null;
       try {
-        writeEvent({
-          status: 'agent:improvement',
-          detail: 'Running improvement agent to generate quality recommendations.',
-          prompt: improvementPrompt
-        });
+        telemetry.info('Agent', 'Running improvement agent to generate quality recommendations.');
 
         const improvementResult = await model.generateContent(improvementPrompt);
         const improvementText = improvementResult.response.text();
@@ -778,14 +834,12 @@ ${JSON.stringify(manifest, null, 2)}
           notes: improvementParsed ? 'parsed' : 'raw'
         });
       } catch (improvementError) {
-        writeEvent({
-          status: 'agent:improvement',
-          detail: `Improvement agent failed: ${improvementError.message}`
-        });
+        telemetry.error('Agent', `Improvement agent failed: ${improvementError.message}`);
       }
 
       res.write(`data: ${JSON.stringify({ done: true, manifest, improvements: improvementParsed })}\n\n`);
     } catch (parseError) {
+      telemetry.error('Agent', 'Final manifest parsing failed', parseError);
       res.write(`data: ${JSON.stringify({ done: true, rawText: manifestText, parseError: parseError.message })}\n\n`);
     }
 
@@ -799,11 +853,13 @@ ${JSON.stringify(manifest, null, 2)}
       metadata: { 
         domains,
         region,
-        responseLength: manifestText.length
+        responseLength: manifestText.length,
+        runId
       }
     });
   } catch (error) {
     console.error('Manifest agent error:', error);
+    telemetry.error('API', 'Unhandled error', error);
     res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
     res.end();
   }

@@ -19,6 +19,8 @@ import geminiRoutes from './routes/geminiRoutes.js';
 import consentRoutes from './routes/consentRoutes.js';
 import twoKeyRoutes from './routes/twoKeyRoutes.js';
 import securityRoutes from './routes/securityRoutes.js';
+import factoryRoutes from './routes/factoryRoutes.js';
+import modulePackRoutes from './routes/modulePackRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -110,6 +112,8 @@ app.use('/api/gemini', geminiRoutes);
 app.use('/api/consent', consentRoutes);
 app.use('/api/two-key', twoKeyRoutes);
 app.use('/api/security', securityRoutes);
+app.use('/api/factory', factoryRoutes);
+app.use('/api/module-packs', modulePackRoutes);
 
 // Serve static frontend in production
 if (process.env.NODE_ENV === 'production') {

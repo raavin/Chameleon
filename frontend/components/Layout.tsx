@@ -219,6 +219,17 @@ const Layout: React.FC<LayoutProps> = ({
               </button>
             </section>
 
+            {/* Module Packs */}
+            <section>
+              <button
+                onClick={() => setViewMode('module_packs')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${viewMode === 'module_packs' ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-200' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
+              >
+                <span className="text-base">📦</span>
+                Module Packs
+              </button>
+            </section>
+
             {/* Active Modules */}
             <section>
               <button 

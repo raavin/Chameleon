@@ -29,6 +29,7 @@ const Engine: React.FC<EngineProps> = ({ domain, currency, library, onSuccess, p
   }, [prefillData, domain]);
 
   const currentSection = domain.sections[sectionIndex];
+  if (!currentSection) return null;
   const progress = ((sectionIndex + 1) / domain.sections.length) * 100;
 
   const handleFieldChange = (id: string, val: any) => {

@@ -10,6 +10,7 @@ import Consent from './Consent.js';
 import TwoKeyAction from './TwoKeyAction.js';
 import SecurityAlert from './SecurityAlert.js';
 import AgentImprovement from './AgentImprovement.js';
+import ModulePack from './ModulePack.js';
 
 export {
   Manifest,
@@ -22,5 +23,6 @@ export {
   Consent,
   TwoKeyAction,
   SecurityAlert,
-  AgentImprovement
+  AgentImprovement,
+  ModulePack
 };

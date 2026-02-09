@@ -81,6 +81,15 @@ export interface Manifest {
   };
   created_by?: string;
   visibility?: 'PUBLIC' | 'PRIVATE';
+  module_pack_id?: string;
+  module_type?: 'standalone' | 'user-management' | 'client-entity' | 'data-collection' | 'data-views' | 'communications' | 'notes' | 'calendar' | 'tasks' | 'workflow' | 'reporting' | 'custom';
+  module_metadata?: {
+    title?: string;
+    description?: string;
+    dependencies?: string[];
+    priority?: number;
+    tags?: string[];
+  };
   config: {
     currency: string;
     locale: string;

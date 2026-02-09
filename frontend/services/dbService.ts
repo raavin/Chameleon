@@ -225,6 +225,31 @@ export const DB = {
   },
 
   /**
+   * Delete manifest - removes from both server and local
+   */
+  async deleteManifest(manifestId: string) {
+    console.log('[DB] deleteManifest called with:', manifestId);
+
+    // Delete from local first
+    try {
+      await IDB.delete('manifests', manifestId);
+      console.log('[DB] Deleted from IndexedDB');
+    } catch (idbErr) {
+      console.error('[DB] IndexedDB delete failed:', idbErr);
+    }
+
+    // Try to delete from server
+    try {
+      if (await isServerAvailable()) {
+        await manifestApi.delete(manifestId);
+        console.log('[DB] Deleted from server');
+      }
+    } catch (err) {
+      console.warn('[DB] Failed to delete manifest from server:', err);
+    }
+  },
+
+  /**
    * Get client document
    */
   async getClientDocument(clientId: string): Promise<ClientRecord | null> {
