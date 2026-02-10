@@ -95,17 +95,24 @@ Click 'Create and Generate'
 It will go through several stages 
 
 *Domain classification* - it will go through some initial ideation to set up some reasonable starting parameters based on your information. It will put together a card containing a range of domain areasand ontological development. 
-*Expert Research* - Agents will attempt to pull information regarding local customs and laws and become and expert in the domain. 
-*Ideation* - Interview questions are developed based on the research and ontology. There are interactive and self-interview consultation processes. Self interview is the one that currently works most effecvtively acting as consultant and customer in the consultation process. The interactive is not thoroughly tested yet. 
-*Module Generation* - The JSON files are generated for the form builder. These modules can be accessed in the left panel. If a client is selected, you can enter data in the feilds and they will be assicated with the client file. 
 
-The package should contain a client_profile type that allows you to enter client details so you can attache modueles to a client record. 
+*Expert Research* - Agents will attempt to pull information regarding local customs and laws and become and expert in the domain. 
+
+*Ideation* - Interview questions are developed based on the research and ontology. There are interactive and self-interview consultation processes. Self interview is the one that currently works most effecvtively acting as consultant and customer in the consultation process. The interactive is not thoroughly tested yet. 
+
+*Module Generation* - The JSON files are generated for the form builder. These modules can be accessed in the left panel. If a client is selected, you can enter data in the feilds and they will be assicated with the client file. If they don't appear straight away, refresh the page. They should show up. 
+
+The package should contain a client_profile type that allows you to enter client details so you can attache modules to a client record. 
 
 Create a client record to complete the rest of the forms.
 
 **TODOS**
 
 The modules are broader that are currently supported by the app. It has a tendency to try to cover staffing and other stakeholders using the same client strategy. this is intentioanl but stakeholder entity separation needs to be implemented. 
+
+Need to fix refresh and fetch to get the module data. also need to look at how we navigate the module info and manifest files. 
+
+
 
 3. **Run the app:**
    ```bash
