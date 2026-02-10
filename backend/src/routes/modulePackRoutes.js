@@ -13,6 +13,7 @@ import { randomUUID } from 'crypto';
 import { optionalAuth } from '../middleware/authMiddleware.js';
 import ModulePack from '../models/ModulePack.js';
 import Manifest from '../models/Manifest.js';
+import User from '../models/User.js';
 import { ExpertModeAgent, createExpertModeAgent } from '../services/expertModeAgent.js';
 import { IdeationAgent, createIdeationAgent } from '../services/ideationAgent.js';
 import { ModuleFactoryAgent, createModuleFactoryAgent } from '../services/moduleFactoryAgent.js';
@@ -981,6 +982,7 @@ router.post('/:id/generate-modules', async (req, res) => {
 
     const moduleFactory = createModuleFactoryAgent();
 
+    let moduleOrder = null;
     const results = await moduleFactory.generateModules({
       modulePackId: modulePack.id,
       expertContext: modulePack.expert_context,
@@ -988,6 +990,10 @@ router.post('/:id/generate-modules', async (req, res) => {
       config: modulePack.config,
       originalRequest: modulePack.original_request
     }, (progress) => {
+      // Capture moduleOrder from the final summary event
+      if (progress.summary?.moduleOrder) {
+        moduleOrder = progress.summary.moduleOrder;
+      }
       writeEvent({ ...progress, phase: 'module_generation' });
     });
 
@@ -1007,6 +1013,28 @@ router.post('/:id/generate-modules', async (req, res) => {
     modulePack.current_phase = 'complete';
     await modulePack.save();
 
+    // Use the AI-determined module order from the factory, or fallback to generation order
+    const orderedIds = moduleOrder || results
+      .filter(r => r.status === 'completed' && r.manifest_id)
+      .map(r => r.manifest_id);
+
+    if (req.user && orderedIds.length > 0) {
+      try {
+        const user = await User.findOne({ email: req.user.email });
+        if (user) {
+          // Get existing order, filter out the new IDs, then prepend new IDs
+          const existingOrder = user.preferences?.manifest_order || [];
+          const filteredExisting = existingOrder.filter(id => !orderedIds.includes(id));
+          user.preferences = user.preferences || {};
+          user.preferences.manifest_order = [...orderedIds, ...filteredExisting];
+          await user.save();
+        }
+      } catch (orderErr) {
+        console.error('Failed to update user manifest order:', orderErr);
+        // Non-critical, continue
+      }
+    }
+
     writeEvent({
       status: 'complete',
       phase: 'module_generation',
@@ -1015,7 +1043,8 @@ router.post('/:id/generate-modules', async (req, res) => {
         total: results.length,
         completed: modulePack.progress.modules_generated,
         failed: modulePack.progress.modules_failed,
-        manifestIds: results.filter(r => r.manifest_id).map(r => r.manifest_id)
+        manifestIds: results.filter(r => r.manifest_id).map(r => r.manifest_id),
+        moduleOrder: orderedIds
       }
     });
 
@@ -1446,6 +1475,7 @@ async function runFullPipeline(modulePack, request, writeEvent) {
     await modulePack.save();
 
     const moduleFactory = createModuleFactoryAgent();
+    let moduleOrder = null;
     const results = await moduleFactory.generateModules({
       modulePackId: modulePack.id,
       expertContext,
@@ -1454,6 +1484,9 @@ async function runFullPipeline(modulePack, request, writeEvent) {
       originalRequest: modulePack.original_request,
       refinedOntology
     }, async (progress) => {
+      if (progress.summary?.moduleOrder) {
+        moduleOrder = progress.summary.moduleOrder;
+      }
       await logAndWrite({ ...progress, phase: 'module_generation' });
     });
 
@@ -1472,6 +1505,26 @@ async function runFullPipeline(modulePack, request, writeEvent) {
 
     modulePack.current_phase = 'complete';
 
+    // Update user's manifest_order preference with the AI-determined order
+    const orderedIds = moduleOrder || results
+      .filter(r => r.status === 'completed' && r.manifest_id)
+      .map(r => r.manifest_id);
+
+    if (req.user && orderedIds.length > 0) {
+      try {
+        const user = await User.findOne({ email: req.user.email });
+        if (user) {
+          const existingOrder = user.preferences?.manifest_order || [];
+          const filteredExisting = existingOrder.filter(id => !orderedIds.includes(id));
+          user.preferences = user.preferences || {};
+          user.preferences.manifest_order = [...orderedIds, ...filteredExisting];
+          await user.save();
+        }
+      } catch (orderErr) {
+        console.error('Failed to update user manifest order:', orderErr);
+      }
+    }
+
     await logAndWrite({
       status: 'pipeline_complete',
       phase: 'complete',
@@ -1481,7 +1534,8 @@ async function runFullPipeline(modulePack, request, writeEvent) {
         questionsAnswered: ideationDocument.questions_answered?.length || 0,
         modulesGenerated: modulePack.progress.modules_generated,
         modulesFailed: modulePack.progress.modules_failed,
-        manifestIds: results.filter(r => r.manifest_id).map(r => r.manifest_id)
+        manifestIds: results.filter(r => r.manifest_id).map(r => r.manifest_id),
+        moduleOrder: orderedIds
       }
     });
 

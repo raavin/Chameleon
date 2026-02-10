@@ -1,6 +1,7 @@
 import express from 'express';
 import Submission from '../models/Submission.js';
 import Client from '../models/Client.js';
+import Manifest from '../models/Manifest.js';
 import { logAudit } from '../middleware/auditMiddleware.js';
 import { optionalAuth } from '../middleware/authMiddleware.js';
 
@@ -73,9 +74,16 @@ router.post('/', async (req, res) => {
       { upsert: true, new: true, runValidators: true }
     );
 
+    // Check if this submission is from a client profile module
+    let manifestModuleType = null;
+    if (submissionData.manifest_id) {
+      const manifest = await Manifest.findOne({ id: submissionData.manifest_id });
+      manifestModuleType = manifest?.module_type;
+    }
     const fromProfile =
       submissionData.domain_id === 'client_profile' ||
-      submissionData.data?.module_type === 'CLIENT_CORE';
+      submissionData.data?.module_type === 'CLIENT_CORE' ||
+      manifestModuleType === 'client-entity';
     const clientName =
       submissionData.data?.full_name ||
       submissionData.data?.name ||
