@@ -1,0 +1,120 @@
+# Domain XIII: Disability, Neurodiversity & Accessibility — The Sovereignty & Inclusion Manifest
+
+In the Chameleon Protocol, **Domain XIII** is the "Self-Determination Engine." It moves beyond the "Medical Model" of disability—which views people as problems to be fixed—to the **Social and Human Rights Models**, where the focus is on removing societal barriers and empowering individual agency. It treats accessibility not as a feature, but as a non-negotiable prerequisite for all other 12 domains.
+
+This deep-dive provides the AI Factory with the architectural DNA to govern **Individualized Funding (NDIS-style)**, **Neuro-affirming clinical pathways**, **Universal Design for Public Infrastructure**, and **Sovereign Assistive Technology**.
+
+---
+
+## 1. The Inclusion Taxonomy: Global Service Archetypes
+
+The system must identify the "Agency Logic" to apply the correct rights-based frameworks and funding guardrails.
+
+### A. Individualized Funding & Self-Management
+
+* **NDIS-Style Personalized Budgets:** Direct control of funding for the person with a disability to purchase their own supports.
+* **Support Coordination:** Managing the links between formal services and informal community networks.
+* **Plan Management:** Financial oversight and automated acquittal of service invoices (Domain VII linkage).
+
+### B. Neuro-Affirming Care & Support
+
+* **Autism & ADHD Support:** Services that validate neuro-differences rather than enforcing "normative" behavior.
+* **Sensory-Aware Environments:** Managing physical spaces via the Hub to reduce sensory overload (e.g., smart-lighting and noise-cancellation logic).
+* **Communication Access (AAC):** Integrating Augmentative and Alternative Communication tools directly into the "Spoke" interface.
+
+### C. Physical Accessibility & Universal Design
+
+* **Built Environment Auditing:** Digital twin mapping of ramps, lifts, and tactile paths in public infrastructure (Domain IX linkage).
+* **Transport Accessibility:** Real-time logging of wheelchair-accessible fleet availability (Domain VIII linkage).
+* **Digital Inclusion:** Hard-coded compliance with **WCAG 2.1/2.2 AAA** standards for all Chameleon interfaces.
+
+### D. Rights Monitoring & Advocacy
+
+* **UNCRPD Compliance:** Automated reporting against the **UN Convention on the Rights of Persons with Disabilities**.
+* **Restrictive Practice Oversight:** Mandatory "Two-Key" sign-off and WORM logging for any limitation of liberty, with immediate alerts to an independent Advocate (Domain VI linkage).
+* **Sovereign Assistive Tech:** Tracking the lifecycle of wheelchairs, prosthetics, and communication devices, including "Right to Repair" documentation.
+
+---
+
+## 2. The Inclusion Component Library: Sovereign Input Types
+
+| Component ID | Function | Governance & Integrity Logic |
+| --- | --- | --- |
+| `DIS_PLAN_BUDGET` | Personal Funding Rail | A digital "Wallet" where the client (not the provider) signs off on payments via WebAuthn.
+
+ |
+| `DIS_SENSORY_MAP` | Environment Profile | Allows a user to set "Sensory Preferences" that auto-adjust smart-lighting in Chameleon-enabled facilities. |
+| `DIS_AAC_SPEAK` | Comm-Access Tool | A customizable "Symbol-to-Speech" engine built into the Spoke for non-speaking users. |
+| `DIS_RIGHTS_LOG` | Violation Sentinel | A "Break-Glass" button for the client to report abuse or neglect directly to an external auditor. |
+| `DIS_ACCESS_CHECK` | Universal Design Audit | A `GOV_PHOTO_VERIFY` tool for checking if a new ramp or door meets the 1:14 gradient law.
+
+ |
+| `DIS_EQUIP_WORM` | Device Maintenance | An immutable log of repairs for assistive tech, preventing providers from billing for "phantom" maintenance. |
+
+---
+
+## 3. UX Stories: The Experience of Agency
+
+### Story 1: The Self-Manager (Financial Sovereignty)
+
+**The Scenario:** A wheelchair user in Melbourne is hiring a new support worker.
+**The UX:** The user opens the `DIS_PLAN_BUDGET` on their phone.
+**The Action:** They review the worker’s "Verified Competency Hash" (Domain 8). They "Accept" the worker into their plan.
+**The Governance:** Payment is only released from the user’s digital wallet when the user (or their nominee) taps to confirm the shift was completed. This eliminates **"Provider Capture"** where agencies control the money.
+
+### Story 2: The Non-Speaking Student (Communication Access)
+
+**The Scenario:** A child who uses a symbol-board is attending a rural school (Domain 9).
+**The UX:** The teacher’s tablet (Spoke) automatically switches to "AAC Sync Mode."
+**The Action:** The child uses their own device to select "I need a break." The teacher's device receives the alert instantly.
+**The Governance:** The `DIS_AAC_SPEAK` log records that the student’s communication right was respected, providing evidence for the annual `UNCRPD` audit.
+
+### Story 3: The Neurodivergent Professional (Environment Control)
+
+**The Scenario:** An employee with sensory sensitivities is working in a communal NGO office.
+**The UX:** As they walk into a room, the Hub recognizes their `DIS_SENSORY_MAP`.
+**The Action:** The smart-lights dim to 30%, and the white-noise machine activates.
+
+
+**The Experience:** The software "bends to the will" of the user's nervous system, reducing the cognitive load of navigating a hostile environment.
+
+---
+
+## 4. The Panopticon of Integrity: Ending "Disability Fraud" & Abuse
+
+The disability sector is high-risk for financial exploitation by providers and physical abuse by staff.
+
+1. **The "Nominee-Check" Agent:** If a guardian or nominee is managing a client’s budget, the system triggers randomized `GOV_PHOTO_VERIFY` checks to ensure the funds are actually being spent on the client’s needs (e.g., equipment or social outings).
+2. **Anti-Restrictive Practice Shield:** Any use of "Chemical or Physical Restraint" requires a `GOV_TWO_KEY` authorization from an external clinical lead. The system generates an immutable WORM record that cannot be hidden from the Senior Practitioner or Public Advocate.
+
+
+3. **Provider "Rate-Cap" Enforcer:** The AI "Sentinel" (Domain VII) automatically blocks any invoice that exceeds the legislated price-guide, preventing "Disability Price-Gouging".
+
+---
+
+## 5. Global Adaptability & Sovereignty
+
+* **Developed Context:** Focuses on integration with **National Disability Insurance Schemes**, **Employment Participation** (Domain 8), and **Web Accessibility Law**.
+* **Developing Context:** Focuses on **Community-Based Rehabilitation (CBR)**. The system uses the **CARE Principles** to empower local "Disability Committees" to manage collective resources (e.g., a shared van or prosthetic lab).
+
+
+* **Crisis/Displaced Context:** The protocol mandates a "Disability-First Triage" in Domain V. Refugee camps must use the `DIS_ACCESS_CHECK` tool to ensure that latrines and aid-distribution points are physically reachable.
+
+---
+
+## 6. Recursive Manifest Generation for Domain XIII
+
+When the AI builds a Disability module, it follows this loop:
+
+1. **Ingest Disability Rights Law:** "Read the UNCRPD and the local Disability Discrimination Act."
+2. **Define Access Standards:** "Hard-code WCAG 2.2 and Universal Design gradients into all building and UI tasks."
+3. 
+**Map SDOH Outcomes:** "Ensure all 'Barriers to Participation' are coded to **ICD-11** and **LOINC** for longitudinal health mapping".
+
+
+4. 
+**Seal the Agency Logic:** "Generate the `manifest.json` that places the budget control (Two-Key) in the hands of the person with the disability".
+
+
+
+**This deep-dive establishes Domain XIII as the ethical benchmark for inclusion. Shall we proceed to Domain XIV: Culture, Heritage & Indigenous Knowledge?**

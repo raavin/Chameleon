@@ -1,0 +1,98 @@
+# Domain V: Emergency Relief (ER) & Material Aid — The Humanitarian Logistics & Survival Manifest
+
+In the Chameleon Protocol, **Domain V** is the "Rapid Response Engine." While other domains focus on long-term clinical or social outcomes, Domain V is about the **immediacy of survival**. It governs the movement of goods, calories, and cash into the hands of those in crisis.
+
+This deep-dive provides the AI Factory with the architectural breadth to manage everything from a localized food bank in London to a 100,000-person refugee camp in Jordan or a post-cyclone distribution network in Fiji.
+
+---
+
+## 1. The Taxonomy of Survival: Global Service Archetypes
+
+The system must adapt its logic based on the "Resource Type" and the "Crisis Velocity."
+
+### A. Rapid-Onset Disaster Response (The First 72 Hours)
+
+* **Search & Rescue (SAR) Support:** Logging victim locations, status, and extraction priority.
+* **Mass Feeding & Hydration:** Tracking thousands of meals and liters of water with zero friction.
+* **Emergency Shelter Kits:** Distribution of "Non-Food Items" (NFI) like tents, blankets, and solar lights.
+* **WASH (Water, Sanitation, Hygiene):** Managing water trucking routes, latrine construction, and hygiene kit deployment.
+
+### B. Conflict & Displacement (Long-Term Crisis)
+
+* **Refugee/IDP Camp Management:** Tracking family units, caloric intake, and camp density.
+* **Restoring Family Links (RFL):** Red Cross-style logic for matching missing persons.
+* **Protection Services:** Identifying vulnerable individuals (unaccompanied minors, elderly) during mass movement.
+
+### C. Cash-Based Interventions (CBT) & Financial Aid
+
+* **Unconditional Cash Transfers:** Universal survival payments.
+* **Conditionality (Work-for-Cash):** Linking payments to community projects (e.g., clearing debris).
+* **Voucher Systems:** Digital or paper coupons for use in local markets to stimulate the local economy.
+
+### D. Urban Poverty & Social Safety Nets
+
+* **Food Banks & Pantries:** Inventory management for donated goods and volunteer-led distribution.
+* **Utility Relief:** Emergency payments for electricity, water, or heating to prevent eviction.
+* **School Feeding Programs:** Targeted nutritional support for children.
+
+---
+
+## 2. The Relief Component Library: Sovereign Input Types
+
+| Component ID | Function | Governance & Evidence Logic |
+| --- | --- | --- |
+| `ER_NEED_ASSESS` | Multi-Sector Needs Assessment | A rapid-survey tool (e.g., MIRA) that auto-weights vulnerability to prioritize aid. |
+| `ER_SCAN_NFI` | Barcode/RFID Supply Scan | Instant inventory deduction. Prevents "skimming" by staff at the warehouse gate. |
+| `ER_VOUCHER_GEN` | Dynamic QR Voucher | Generates a time-limited, encrypted QR code for the recipient’s phone or a printed card. |
+| `ER_FUZZY_MATCH` | Regional Duplicate Check | AI agent that scans name/DOB/photo hashes across *all* local NGOs to prevent "double-dipping." |
+| `ER_CBT_RELEASE` | Cash Disbursement | Linked to `GOV_TWO_KEY`. Requires a "Distributor" and an "Auditor" to release the funds. |
+| `ER_IMPACT_SURVEY` | Post-Distribution Monitoring | A "feedback loop" tool for recipients to rate the quality/safety of the aid. |
+
+---
+
+## 3. UX Stories: The Logic of Relief
+
+### Story 1: The Logistics Officer (Post-Earthquake)
+
+**The Scenario:** 5,000 hygiene kits have arrived at a port. There is no power and minimal connectivity.
+**The UX:** The officer opens the "Hub" (ruggedized battery-powered server). The UI is "High-Contrast / Low-Data."
+**The Action:** As kits are loaded onto trucks, the officer uses `ER_SCAN_NFI`. The system tracks the "Chain of Custody" from the port to the village.
+**The Governance:** The truck driver must tap their ID key. The system records the GPS of the hand-off. If a truck "disappears," the manifest flags it on the Auditor’s dashboard immediately.
+
+### Story 2: The Urban Case Worker (Melbourne Emergency Relief)
+
+**The Scenario:** A family has lost everything in a house fire.
+**The UX:** The worker uses the `ER_NEED_ASSESS` tool. Based on the family size, the AI suggests: *$400 Food Voucher, 2x Bedding Kits, 1x Trauma Counseling Referral (Domain II).*
+**The Action:** The worker clicks "Approve." The `ER_VOUCHER_GEN` creates a QR code on the family’s phone.
+**The Governance:** The voucher is only valid at registered local supermarkets. The supermarket scans it, and the "Acquittal" is handled automatically in the Treasury (Domain VII).
+
+---
+
+## 4. The Panopticon of Integrity: Preventing "Aid Diversion"
+
+Corruption in aid distribution is a global crisis (reselling of goods, "ghost" recipients, and extortion).
+
+1. **The "Photo-Verification" Mandate:** For high-value items (e.g., $500 cash or solar kits), the system requires `GOV_PHOTO_VERIFY`. A photo of the recipient with the item is hashed and locked.
+2. **Anti-Double-Dipping Agent:** In a crisis, people may visit five different NGOs for the same kit. The `ER_FUZZY_MATCH` agent works across organizational boundaries (if the manifest allows) to ensure fair distribution.
+3. **Real-Time "burn-rate" Monitoring:** If the system sees one distribution point moving 10x more kits than others, it triggers a "Governance Spot-Check" to ensure the kits aren't being siphoned into the black market.
+
+---
+
+## 5. Global Standards: The Sphere Handbook Integration
+
+A world-class system must be "Sphere Compliant." The AI Factory bakes these standards into the validation:
+
+* **Water:** If the worker logs a water distribution, the system checks: *"Is this at least 15 liters per person per day?"*
+* **Nutrition:** If the meal log shows less than 2,100 kcal per person, the system flags a "Nutritional Deficit" warning to the manager.
+* **Dignity:** The system mandates that distribution points have "Gender-Segregated Queues" or "Priority Lanes" for the disabled, enforced through the `ER_NEED_ASSESS` workflow.
+
+---
+
+## 6. Recursive Manifest Generation for Domain V
+
+1. **Contextual Ingestion:** "What is the UN OCHA situation report for this region? What is the local currency inflation rate?"
+2. **Standards Mapping:** "Apply the Sphere Handbook standards for 'Food Security and Nutrition'."
+3. **Logistics Linkage:** "Connect the inventory manifest to the warehouse management API."
+4. **Security Scaling:** "If in a high-conflict zone, enable 'Anonymized Recipient Identity'—use biometric hashes instead of names to protect people from retaliation."
+
+**This deep-dive establishes Domain V as the protocol’s rapid-response tactical layer. Shall we move to Domain VI: Social Protection & Justice? This will cover the legal frameworks, family violence, and the MARAM/FVISS standards.**

@@ -1,0 +1,104 @@
+# Domain I: Primary Health & Hospital Management — The Clinical Master-Volume
+
+This is the deep-dive architectural manifest for **Domain I**. In the Chameleon Protocol, Primary Health is not just "doctor-patient software"; it is a **Clinical Execution Engine**. It is designed to scale from a solar-powered bush clinic in South Sudan to a multi-campus teaching hospital in Melbourne.
+
+By treating clinical guidelines as **"Rules as Code" (RaC)**, we ensure that the "Standard of Care" is never a suggestion—it is the logic of the interface itself.
+
+---
+
+## 1. The Clinical Philosophy: "The Integrated Hourglass"
+
+World-class health governance requires two things that usually contradict: **Rigid Safety** and **Infinite Flexibility**.
+
+* **The Narrow Waist:** Everything in Domain I maps to the "Narrow Waist" of international standards: **HL7 FHIR** (for data exchange), **ICD-11** (for diagnosis), and **SNOMED CT** (for clinical terminology).
+* **The Wide Top/Bottom:** The UI adapts to local languages and cultural norms (e.g., "Elder Verification" for consent), while the backend adapts to any server environment (from a Raspberry Pi to a Tier-4 Data Center).
+
+---
+
+## 2. The Comprehensive Service Taxonomy
+
+The AI Factory uses this directory to hydrate the specific modules needed for a facility.
+
+### A. The Front Gate: Emergency & Triage (The "Golden Hour" Logic)
+
+The system does not use static forms for triage. It uses **Dynamic Triage Manifests**.
+
+* **Archetypes:** Level 1 Trauma Centers, Urgent Care, Rural First-Aid Posts.
+* **The Logic:** If the AI detects "Chest Pain" in the `OBS_SYMPTOM` field, the UI immediately forces a **High-Priority Triage** path. It populates the screen with three tasks: *ECG, Oxygen, Aspirin*.
+* **Global Standard:** Automatically switches between **ATS (Australian Triage Scale)** and **WHO ETAT (Emergency Triage Assessment and Treatment)** based on the geographic manifest.
+
+### B. The Engine Room: Surgery & Anaesthesia
+
+* **Archetypes:** Major Surgery, Day Surgery, Field Hospitals.
+* **Mandatory Component: `SURG_CHECK_WHO**`: The system locks the "Incision" button until the **WHO Surgical Safety Checklist** (Sign In, Time Out, Sign Out) is cryptographically signed by both the Surgeon and the Anaesthetist using their **Two-Key** hardware tokens.
+* **Tracking:** Real-time theatre utilization logs, medical gas monitoring, and surgical implant serial-number tracking (for recall safety).
+
+### C. The Life Cycle: Maternal, Neonatal & Paediatrics
+
+* **Maternal:** Digital **Partograms** that auto-alert a consultant if the labor curve deviates from the WHO standard.
+* **Neonatal (NICU):** Micro-dosing calculators for high-risk medications, integrated with birth-weight sensors to prevent manual entry errors.
+* **Immunization:** Blockchain-anchored vaccination records that stay with the child even if they cross borders (Refugee context).
+
+### D. The Specialist Wings (Internal Medicine)
+
+* **Cardiology:** Integrated ECG DICOM viewers.
+* **Oncology:** "Chemo-Cycles" management—the system prevents a nurse from administering a dose if the patient’s latest `LAB_NEUTROPHIL_COUNT` is below the safety threshold defined in the legislative manifest.
+* **Communicable Disease:** Outbreak monitoring (Ebola, COVID, TB). When a "Positive" result is entered, the **Panopticon** automatically notifies public health authorities and locks the patient's "Room Assignment" to an Isolation Ward logic.
+
+### E. Diagnostics & Support (The Information Spine)
+
+* **Pathology (LAB):** Uses **LOINC** codes. The system handles everything from "Phlebotomy Collection" to "Microbiology Sensitivity" reports.
+* **Radiology (RAD):** Zero-footprint DICOM viewer. AI "Second Opinion" agents scan X-rays for TB or fractures to assist rural clinicians.
+* **Pharmacy & Cold Chain:** Every vaccine is linked to a `TEMP_LOG`. If a fridge fails, the system "kills" the batch digitally—preventing any clinician from scanning the barcode for use.
+
+---
+
+## 3. The Component Library for Domain I
+
+The AI builds the app using these specialized "Clinical Atoms":
+
+| Component ID | Clinical Function | Governance Logic |
+| --- | --- | --- |
+| `CLIN_VITALS_STREAM` | Real-time BP, O2, Temp | Triggers "Medical Emergency Team" (MET) call if outside manifest range. |
+| `CLIN_MED_MAR` | Medication Administration Record | Requires barcode scan of both Patient ID and Medication Batch. |
+| `CLIN_CONSENT_BIO` | Biometric Surgery Consent | Captures a short video/voice clip of the patient consenting, hashed into the record. |
+| `CLIN_PATH_ORDER` | Lab Request | Only displays tests relevant to the current ICD-11 diagnosis to reduce waste. |
+
+---
+
+## 4. UX Stories: The Human Reality of Domain I
+
+### Story 1: The "No-Connectivity" Surgery (South Sudan)
+
+**The Scenario:** A surgeon is performing an emergency C-section. There is no internet.
+**The UX:** The tablet is connected to the "Hub" (a local ruggedized server). The surgeon uses voice commands: *"Protocol: C-Section. Record: Incision time 14:02."* The system, running local NLP, logs the event.
+**The Governance:** Because it’s an emergency, the system allows the surgeon to skip the "Two-Key" approval for blood, but it triggers a **"Break-Glass" Alert**. When the internet returns, the Regional Auditor receives a report explaining why the protocol was bypassed.
+
+### Story 2: The Integrated Patient (Melbourne)
+
+**The Scenario:** A patient with heart failure arrives at the ER.
+**The UX:** The nurse scans the patient’s phone (Sovereign ID). The system doesn't just show "Heart Failure"; it pulls the **Domain III (Mental Health)** flag showing the patient has severe anxiety about needles.
+**The Experience:** The UI prompts the nurse: *"Recommended Approach: Calm environment, use butterfly needle (Patient Preference)."* This is "Human-Centric Care" at scale.
+
+---
+
+## 5. The Panopticon of Integrity: Preventing Clinical Fraud
+
+In many regions, the biggest threat to health is the theft of supplies and "ghost" patients.
+
+1. **Drug Diversion Prevention:** Any S8/Controlled drug requires the `GOV_TWO_KEY` protocol. Two nurses must be physically present to sign the digital "Waste" log.
+2. **Ghost Patient Audit:** To claim funding for a clinic day, the system requires a `GOV_PHOTO_VERIFY` of the clinic queue and a randomized biometric check of 5% of patients.
+3. **WORM Medical Records:** Once a doctor signs a consultation note, it is cryptographically sealed. Any "Addendum" is a new record. The original can *never* be altered, ensuring a perfect legal audit trail for malpractice or coronial inquests.
+
+---
+
+## 6. Recursive Manifest Generation
+
+To build this unit for a specific project, the AI follows this recursive loop:
+
+1. **Read Law:** "What are the Victoria Health Services (Health Records) Act requirements?"
+2. **Read Standard:** "What is the latest WHO recommendation for Post-Partum Haemorrhage?"
+3. **Synthesize:** "Generate a manifest for a 'Maternity Ward' that includes an immutable partogram and a two-key blood release protocol."
+4. **Execute:** The Chameleon Protocol loads this JSON and becomes the Maternity Ward system.
+
+**This deep dive defines Domain I as a living, clinical organism. Shall we proceed to the architectural deep dive of Domain II: Mental Health & Psychosocial Support?**
