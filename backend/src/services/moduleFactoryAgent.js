@@ -60,6 +60,20 @@ export class ModuleFactoryAgent {
       refinedOntology = null
     } = modulePackConfig;
 
+    // Ensure a client-entity module exists — the system requires it for client creation/selection
+    const hasClientEntity = ideationDocument.proposed_modules?.some(
+      m => m.module_type === 'client-entity'
+    );
+    if (!hasClientEntity && ideationDocument.proposed_modules) {
+      ideationDocument.proposed_modules.unshift({
+        module_type: 'client-entity',
+        title: 'Client Management',
+        description: 'Core client/entity profiles — required for creating and linking client records across all modules',
+        priority: 0,
+        rationale: 'System requirement: all other modules reference clients via subject_id'
+      });
+    }
+
     this.emitProgress(onProgress, {
       phase: 'planning',
       status: 'starting',
@@ -173,6 +187,33 @@ export class ModuleFactoryAgent {
 
       const validationResult = await this.validateModuleRelationships(results);
 
+      // Phase 4: Determine logical display order for the modules
+      const successfulManifestIds = results
+        .filter(r => r.status === 'completed')
+        .map(r => r.manifest_id);
+
+      let orderedIds = successfulManifestIds;
+      if (successfulManifestIds.length > 0) {
+        this.emitProgress(onProgress, {
+          phase: 'ordering',
+          status: 'starting',
+          message: 'Determining logical module order...'
+        });
+
+        try {
+          orderedIds = await this.determineModuleOrder(results, ideationDocument);
+          this.emitProgress(onProgress, {
+            phase: 'ordering',
+            status: 'complete',
+            message: `Module order established`,
+            orderedIds
+          });
+        } catch (orderError) {
+          console.error('Failed to determine module order:', orderError);
+          // Use fallback order if AI ordering fails
+        }
+      }
+
       this.emitProgress(onProgress, {
         phase: 'complete',
         status: 'success',
@@ -182,7 +223,8 @@ export class ModuleFactoryAgent {
           completed: results.filter(r => r.status === 'completed').length,
           failed: results.filter(r => r.status === 'failed').length,
           totalFields: results.reduce((sum, r) => sum + (r.fields_count || 0), 0),
-          validation: validationResult
+          validation: validationResult,
+          moduleOrder: orderedIds
         }
       });
 
@@ -555,6 +597,12 @@ Return ONLY valid JSON. Do not wrap in markdown code blocks.
 - Example: a field tracking consent should have "section_citation": "privacy_act" and library should contain "privacy_act": { "title": "Privacy Act ...", ... }
 
 Generate 10-20 well-designed fields per domain. Use simple string arrays for options. Grid span must be 1 or 2 only.
+
+${modulePlan.module_type === 'client-entity' ? `**CRITICAL for client-entity modules:**
+- The first domain MUST have "id": "client_profile" — the system uses this exact ID to identify client creation forms
+- The "subject_identifier_field" MUST be a unique identifier field (e.g. "client_id" or "record_id")
+- Include fields for: full name (id: "full_name"), contact details, demographics, and any domain-specific identifiers
+- The "full_name" field is used to display the client name throughout the system` : ''}
 `;
   }
 
@@ -696,6 +744,89 @@ Generate 10-20 well-designed fields per domain. Use simple string arrays for opt
     }
 
     return true;
+  }
+
+  /**
+   * Determine the logical display order for modules in the UI
+   * Places client-entity first, then orders others by workflow dependency
+   */
+  async determineModuleOrder(results, ideationDocument) {
+    const successful = results.filter(r => r.status === 'completed');
+    if (successful.length === 0) return [];
+
+    // Client-entity must always be first
+    const clientModule = successful.find(r => r.module_type === 'client-entity');
+    const otherModules = successful.filter(r => r.module_type !== 'client-entity');
+
+    if (otherModules.length === 0) {
+      return clientModule ? [clientModule.manifest_id] : [];
+    }
+
+    // Use AI to order the remaining modules based on workflow logic
+    const modulesList = otherModules.map(m => ({
+      id: m.manifest_id,
+      type: m.module_type,
+      title: m.title,
+      description: m.description
+    }));
+
+    const prompt = `You are ordering UI modules for a workflow-based application.
+
+**Modules to order:**
+${JSON.stringify(modulesList, null, 2)}
+
+${ideationDocument.workflow_outline ? `**Workflow context:**
+${JSON.stringify(ideationDocument.workflow_outline, null, 2)}` : ''}
+
+**Task:**
+Return a JSON array of module IDs in the order they should appear in the UI sidebar.
+
+**Ordering principles:**
+1. Data collection modules (forms, assessments, intake) come FIRST — users need to collect data before viewing/reporting
+2. Data views (dashboards, summaries) come AFTER data collection
+3. Communication/notes modules come in the MIDDLE
+4. Reporting/analytics come LAST
+5. If there's a clear workflow sequence in the context, follow it
+
+Return ONLY a JSON array of IDs, nothing else:
+["id1", "id2", "id3", ...]`;
+
+    try {
+      const result = await this.planningModel.generateContent(prompt);
+      const text = result.response.text();
+      const jsonMatch = text.match(/\[[\s\S]*?\]/);
+      if (jsonMatch) {
+        const aiOrder = JSON.parse(jsonMatch[0]);
+        // Prepend client module ID
+        return clientModule ? [clientModule.manifest_id, ...aiOrder] : aiOrder;
+      }
+    } catch (err) {
+      console.error('AI ordering failed:', err);
+    }
+
+    // Fallback: simple heuristic ordering
+    const typeOrder = {
+      'data-collection': 1,
+      'assessment': 2,
+      'communications': 3,
+      'notes': 4,
+      'calendar': 5,
+      'tasks': 6,
+      'workflow': 7,
+      'data-views': 8,
+      'reporting': 9,
+      'analytics': 10,
+      'custom': 99
+    };
+
+    const sorted = otherModules.sort((a, b) => {
+      const orderA = typeOrder[a.module_type] || 50;
+      const orderB = typeOrder[b.module_type] || 50;
+      return orderA - orderB;
+    });
+
+    const fallbackOrder = sorted.map(m => m.manifest_id);
+    return clientModule ? [clientModule.manifest_id, ...fallbackOrder] : fallbackOrder;
   }
 
   /**

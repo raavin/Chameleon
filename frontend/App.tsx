@@ -389,7 +389,7 @@ export default function App() {
           readOnly={viewMode === 'review'}
           onSuccess={handleSubmission}
           prefillData={viewMode === 'review' ? submissions.find(s => s.id === selectedSubmissionId)?.data : (selectedClientId ? { [activeDomain.subject_identifier_field]: selectedClientId } : {})}
-          canFinalize={Boolean(selectedClientId) || viewMode === 'review' || activeDomain.id === 'client_profile'}
+          canFinalize={Boolean(selectedClientId) || viewMode === 'review' || activeDomain.id === 'client_profile' || activeManifest.module_type === 'client-entity'}
         />
       )}
       {isDeploymentOpen && (

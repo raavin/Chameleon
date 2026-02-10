@@ -268,7 +268,7 @@ const Layout: React.FC<LayoutProps> = ({
                             viewMode={viewMode}
                             onSelect={() => {
                               const domainId = m.domains[0]?.id || '';
-                              const isClientModule = domainId === 'client_profile';
+                              const isClientModule = domainId === 'client_profile' || m.module_type === 'client-entity';
                               if (!selectedClientId && !isClientModule) {
                                 setNoClientWarning(true);
                                 return;

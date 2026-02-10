@@ -81,8 +81,8 @@ VITE_API_URL=http://localhost:3001/api
 
 ```
 
-**Instructions:**
-When you start things up you will be taking to the main Chameleon webpage. This is just a placeholder. The info is lame to say the least :) The login is very basic and keeps your data entirely on your database. It was only really there as a rate limiter and to stop bots cranking up my AIU costs for early publishing. Log in and you should be fine.
+## Instructions:
+When you start things up you will be taken to the main Chameleon webpage. This is just a placeholder. The info is lame to say the least :) The login is very basic and keeps your data entirely on your database. It was only really there as a rate limiter and to stop bots cranking up my AIU costs for early publishing. Log in and you should be fine.
 
 click launch app, register and log in.
 
@@ -98,6 +98,14 @@ It will go through several stages
 *Expert Research* - Agents will attempt to pull information regarding local customs and laws and become and expert in the domain. 
 *Ideation* - Interview questions are developed based on the research and ontology. There are interactive and self-interview consultation processes. Self interview is the one that currently works most effecvtively acting as consultant and customer in the consultation process. The interactive is not thoroughly tested yet. 
 *Module Generation* - The JSON files are generated for the form builder. These modules can be accessed in the left panel. If a client is selected, you can enter data in the feilds and they will be assicated with the client file. 
+
+The package should contain a client_profile type that allows you to enter client details so you can attache modueles to a client record. 
+
+Create a client record to complete the rest of the forms.
+
+**TODOS**
+
+The modules are broader that are currently supported by the app. It has a tendency to try to cover staffing and other stakeholders using the same client strategy. this is intentioanl but stakeholder entity separation needs to be implemented. 
 
 3. **Run the app:**
    ```bash
