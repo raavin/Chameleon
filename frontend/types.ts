@@ -100,6 +100,55 @@ export interface Manifest {
   library: LegislationLibrary;
 }
 
+export interface OntologyCapability {
+  id: string;
+  name: string;
+  sub_capabilities: string[];
+  confirmed_by_research?: boolean;
+  mapped_module_type?: string;
+  research_evidence?: string;
+}
+
+export interface DomainClassification {
+  primary_domain: string;
+  sub_domain: string;
+  secondary_domains: string[];
+  ontology: {
+    capabilities: OntologyCapability[];
+    data_entities: string[];
+    compliance_domains: string[];
+    workflow_patterns: string[];
+  };
+  regional_factors: {
+    regulatory_bodies: string[];
+    key_legislation: string[];
+    cultural_considerations: string[];
+  };
+  research_tracks_needed: string[];
+  confidence: number;
+  user_confirmed: boolean;
+  user_adjustments?: any;
+}
+
+export interface RefinedOntology {
+  capabilities: OntologyCapability[];
+  data_entities: string[];
+  compliance_domains: string[];
+  workflow_patterns: string[];
+  research_gaps: string[];
+  refined_at?: string;
+}
+
+export interface InterviewMessage {
+  id: string;
+  role: 'agent' | 'user' | 'system';
+  content: string;
+  category?: string;
+  question_id?: string;
+  metadata?: any;
+  timestamp: string;
+}
+
 export interface Submission {
   id: string;
   manifest_id: string;

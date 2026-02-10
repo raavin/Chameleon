@@ -1,6 +1,4 @@
 import React from 'react';
-import { researchDocs } from './researchCatalog';
-
 const features = [
   {
     title: 'AI-Powered Form Generation',
@@ -112,12 +110,6 @@ const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
                 className="px-8 py-4 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-all shadow-lg hover:shadow-xl"
               >
                 Try It Now →
-              </button>
-              <button
-                onClick={() => onNavigate('/research')}
-                className="px-8 py-4 rounded-xl border-2 border-slate-300 text-slate-700 text-sm font-bold hover:bg-white hover:border-slate-400 transition-all"
-              >
-                View Examples
               </button>
               <a
                 href="https://github.com/raavin/Chameleon"

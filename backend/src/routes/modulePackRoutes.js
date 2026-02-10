@@ -16,6 +16,7 @@ import Manifest from '../models/Manifest.js';
 import { ExpertModeAgent, createExpertModeAgent } from '../services/expertModeAgent.js';
 import { IdeationAgent, createIdeationAgent } from '../services/ideationAgent.js';
 import { ModuleFactoryAgent, createModuleFactoryAgent } from '../services/moduleFactoryAgent.js';
+import { DomainClassificationAgent, createDomainClassificationAgent } from '../services/domainClassificationAgent.js';
 
 const router = Router();
 router.use(optionalAuth);
@@ -50,7 +51,10 @@ router.post('/', async (req, res) => {
       fundingBody = '',
       projectName = '',
       autoStart = false,
-      researchDepth = 'comprehensive'
+      researchDepth = 'comprehensive',
+      interviewMode = 'self_interview',
+      selectedDomain = '',
+      selectedSubDomain = ''
     } = req.body;
 
     if (!name || !topic || !region) {
@@ -79,6 +83,7 @@ router.post('/', async (req, res) => {
         funding_body: fundingBody,
         project_name: projectName
       },
+      interview_mode: interviewMode,
       status: 'draft',
       current_phase: 'init',
       created_by: req.user?.userId || 'anonymous',
@@ -113,7 +118,10 @@ router.post('/', async (req, res) => {
         region,
         additionalContext,
         researchDepth,
-        locale
+        locale,
+        selectedDomain,
+        selectedSubDomain,
+        interviewMode
       }, writeEvent).then(() => {
         writeEvent({ done: true, modulePackId });
         clearInterval(keepAlive);
@@ -313,6 +321,418 @@ router.post('/:id/expert-research', async (req, res) => {
 });
 
 /**
+ * POST /api/module-packs/:id/classify-domain
+ *
+ * Run domain classification for a module pack
+ */
+router.post('/:id/classify-domain', async (req, res) => {
+  let keepAlive;
+  try {
+    const { id } = req.params;
+
+    const modulePack = await ModulePack.findOne({ id });
+    if (!modulePack) {
+      return res.status(404).json({ error: 'Module pack not found' });
+    }
+
+    // Set up SSE
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    keepAlive = setInterval(() => res.write(': keepalive\n\n'), 30000);
+
+    const writeEvent = (payload) => {
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    modulePack.status = 'classifying';
+    modulePack.current_phase = 'domain_classification';
+    await modulePack.save();
+
+    writeEvent({ status: 'starting', phase: 'domain_classification', message: 'Starting domain classification...' });
+
+    const classificationAgent = createDomainClassificationAgent();
+
+    const classification = await classificationAgent.classifyDomain({
+      topic: modulePack.original_request.prompt,
+      domains: modulePack.original_request.domains,
+      region: modulePack.config.region,
+      projectName: modulePack.original_request.project_name,
+      fundingBody: modulePack.original_request.funding_body,
+      additionalContext: modulePack.original_request.additional_context
+    }, (progress) => {
+      writeEvent({ ...progress, phase: 'domain_classification' });
+    });
+
+    modulePack.domain_classification = classification;
+    modulePack.progress.domain_classification_complete = true;
+    modulePack.status = 'draft';
+    modulePack.current_phase = 'init';
+    await modulePack.save();
+
+    writeEvent({
+      status: 'complete',
+      phase: 'domain_classification',
+      message: 'Domain classification complete',
+      classification
+    });
+
+    writeEvent({ done: true, modulePackId: id });
+    clearInterval(keepAlive);
+    res.end();
+
+  } catch (error) {
+    console.error('Domain classification error:', error);
+    res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+    if (keepAlive) clearInterval(keepAlive);
+    res.end();
+  }
+});
+
+/**
+ * POST /api/module-packs/:id/confirm-classification
+ *
+ * Confirm or adjust domain classification
+ */
+router.post('/:id/confirm-classification', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { adjustments } = req.body;
+
+    const modulePack = await ModulePack.findOne({ id });
+    if (!modulePack) {
+      return res.status(404).json({ error: 'Module pack not found' });
+    }
+
+    if (!modulePack.domain_classification) {
+      return res.status(400).json({ error: 'No classification to confirm' });
+    }
+
+    // Apply adjustments if provided
+    if (adjustments) {
+      if (adjustments.primary_domain) {
+        modulePack.domain_classification.primary_domain = adjustments.primary_domain;
+      }
+      if (adjustments.sub_domain) {
+        modulePack.domain_classification.sub_domain = adjustments.sub_domain;
+      }
+      if (adjustments.secondary_domains) {
+        modulePack.domain_classification.secondary_domains = adjustments.secondary_domains;
+      }
+      if (adjustments.capabilities) {
+        // User toggled capabilities
+        modulePack.domain_classification.ontology.capabilities = adjustments.capabilities;
+      }
+      if (adjustments.research_tracks_needed) {
+        modulePack.domain_classification.research_tracks_needed = adjustments.research_tracks_needed;
+      }
+      modulePack.domain_classification.user_adjustments = adjustments;
+    }
+
+    modulePack.domain_classification.user_confirmed = true;
+    modulePack.markModified('domain_classification');
+    await modulePack.save();
+
+    res.json({
+      success: true,
+      classification: modulePack.domain_classification
+    });
+
+  } catch (error) {
+    console.error('Confirm classification error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/module-packs/:id/refine-ontology
+ *
+ * Refine ontology after expert research completes
+ */
+router.post('/:id/refine-ontology', async (req, res) => {
+  let keepAlive;
+  try {
+    const { id } = req.params;
+
+    const modulePack = await ModulePack.findOne({ id });
+    if (!modulePack) {
+      return res.status(404).json({ error: 'Module pack not found' });
+    }
+
+    if (!modulePack.domain_classification) {
+      return res.status(400).json({ error: 'Domain classification required before ontology refinement' });
+    }
+
+    if (!modulePack.expert_context?.summary) {
+      return res.status(400).json({ error: 'Expert research must be completed before ontology refinement' });
+    }
+
+    // Set up SSE
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    keepAlive = setInterval(() => res.write(': keepalive\n\n'), 30000);
+
+    const writeEvent = (payload) => {
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    modulePack.current_phase = 'ontology_refinement';
+    await modulePack.save();
+
+    writeEvent({ status: 'starting', phase: 'ontology_refinement', message: 'Starting ontology refinement...' });
+
+    const classificationAgent = createDomainClassificationAgent();
+
+    const refinedOntology = await classificationAgent.refineOntologyFromResearch(
+      modulePack.domain_classification,
+      modulePack.expert_context,
+      (progress) => {
+        writeEvent({ ...progress, phase: 'ontology_refinement' });
+      }
+    );
+
+    modulePack.refined_ontology = refinedOntology;
+    modulePack.progress.ontology_refinement_complete = true;
+    await modulePack.save();
+
+    writeEvent({
+      status: 'complete',
+      phase: 'ontology_refinement',
+      message: 'Ontology refinement complete',
+      refinedOntology
+    });
+
+    writeEvent({ done: true, modulePackId: id });
+    clearInterval(keepAlive);
+    res.end();
+
+  } catch (error) {
+    console.error('Ontology refinement error:', error);
+    res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+    if (keepAlive) clearInterval(keepAlive);
+    res.end();
+  }
+});
+
+/**
+ * POST /api/module-packs/:id/interview-chat
+ *
+ * Conversational interview - accepts user message, returns next agent question
+ * Stores conversation in interview_conversation
+ * On completion, generates ideation document
+ */
+router.post('/:id/interview-chat', async (req, res) => {
+  let keepAlive;
+  try {
+    const { id } = req.params;
+    const { message } = req.body;
+
+    const modulePack = await ModulePack.findOne({ id });
+    if (!modulePack) {
+      return res.status(404).json({ error: 'Module pack not found' });
+    }
+
+    if (!modulePack.expert_context?.summary) {
+      return res.status(400).json({ error: 'Expert research must be completed before interview' });
+    }
+
+    // Set up SSE
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    keepAlive = setInterval(() => res.write(': keepalive\n\n'), 30000);
+
+    const writeEvent = (payload) => {
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    // Initialize conversation if needed
+    if (!modulePack.interview_conversation) {
+      modulePack.interview_conversation = [];
+    }
+
+    const conversation = modulePack.interview_conversation;
+
+    // Add user message if provided
+    if (message) {
+      const lastAgentMsg = [...conversation].reverse().find(m => m.role === 'agent');
+      conversation.push({
+        id: `user_${Date.now()}`,
+        role: 'user',
+        content: message,
+        question_id: lastAgentMsg?.id || null,
+        timestamp: new Date()
+      });
+    }
+
+    // Update status
+    modulePack.status = 'ideating';
+    modulePack.current_phase = 'ideation';
+
+    const ideationAgent = createIdeationAgent();
+
+    // Get next question
+    const result = await ideationAgent.conductInteractiveInterview(
+      conversation,
+      modulePack.expert_context,
+      modulePack.domain_classification || null,
+      modulePack.refined_ontology || null,
+      {
+        topic: modulePack.original_request.prompt,
+        domains: modulePack.original_request.domains,
+        region: modulePack.config.region
+      }
+    );
+
+    if (result.type === 'complete') {
+      // Interview complete - synthesize
+      writeEvent({ status: 'interview_complete', message: 'Interview complete. Synthesizing requirements...' });
+
+      const ideationDocument = await ideationAgent.synthesizeFromConversation(
+        conversation,
+        modulePack.expert_context,
+        modulePack.domain_classification || null,
+        modulePack.refined_ontology || null,
+        {
+          topic: modulePack.original_request.prompt,
+          domains: modulePack.original_request.domains,
+          region: modulePack.config.region
+        },
+        (progress) => writeEvent(progress)
+      );
+
+      modulePack.ideation_document = ideationDocument;
+      modulePack.progress.ideation_complete = true;
+      modulePack.progress.modules_planned = ideationDocument.proposed_modules?.length || 0;
+      modulePack.interview_conversation = conversation;
+      await modulePack.save();
+
+      writeEvent({
+        status: 'complete',
+        type: 'synthesis_complete',
+        message: 'Ideation synthesis complete',
+        interview_progress: 100
+      });
+    } else {
+      // Add agent question to conversation
+      const agentMsg = {
+        id: result.question_id,
+        role: 'agent',
+        content: result.question,
+        category: result.category,
+        question_id: result.question_id,
+        timestamp: new Date()
+      };
+      conversation.push(agentMsg);
+
+      modulePack.interview_conversation = conversation;
+      await modulePack.save();
+
+      writeEvent({
+        status: 'question',
+        type: 'question',
+        question: result.question,
+        category: result.category,
+        question_id: result.question_id,
+        interview_progress: result.interview_progress,
+        follow_up: result.follow_up
+      });
+    }
+
+    writeEvent({ done: true, modulePackId: id });
+    clearInterval(keepAlive);
+    res.end();
+
+  } catch (error) {
+    console.error('Interview chat error:', error);
+    res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+    if (keepAlive) clearInterval(keepAlive);
+    res.end();
+  }
+});
+
+/**
+ * POST /api/module-packs/:id/interview-skip
+ *
+ * Skip remaining interview questions - AI self-answers and generates ideation document
+ */
+router.post('/:id/interview-skip', async (req, res) => {
+  let keepAlive;
+  try {
+    const { id } = req.params;
+
+    const modulePack = await ModulePack.findOne({ id });
+    if (!modulePack) {
+      return res.status(404).json({ error: 'Module pack not found' });
+    }
+
+    if (!modulePack.expert_context?.summary) {
+      return res.status(400).json({ error: 'Expert research must be completed first' });
+    }
+
+    // Set up SSE
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    keepAlive = setInterval(() => res.write(': keepalive\n\n'), 30000);
+
+    const writeEvent = (payload) => {
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    writeEvent({ status: 'starting', message: 'Skipping remaining questions, AI will self-answer...' });
+
+    const ideationAgent = createIdeationAgent();
+    const conversation = modulePack.interview_conversation || [];
+
+    // Synthesize from what we have plus AI self-answering remaining
+    const ideationDocument = await ideationAgent.synthesizeFromConversation(
+      conversation,
+      modulePack.expert_context,
+      modulePack.domain_classification || null,
+      modulePack.refined_ontology || null,
+      {
+        topic: modulePack.original_request.prompt,
+        domains: modulePack.original_request.domains,
+        region: modulePack.config.region
+      },
+      (progress) => writeEvent(progress)
+    );
+
+    modulePack.ideation_document = ideationDocument;
+    modulePack.progress.ideation_complete = true;
+    modulePack.progress.modules_planned = ideationDocument.proposed_modules?.length || 0;
+    modulePack.status = 'draft';
+    modulePack.current_phase = 'module_planning';
+    await modulePack.save();
+
+    writeEvent({
+      status: 'complete',
+      message: 'Interview skip and synthesis complete',
+      summary: {
+        questionsAnswered: ideationDocument.questions_answered?.length || 0,
+        modulesProposed: ideationDocument.proposed_modules?.length || 0
+      }
+    });
+
+    writeEvent({ done: true, modulePackId: id });
+    clearInterval(keepAlive);
+    res.end();
+
+  } catch (error) {
+    console.error('Interview skip error:', error);
+    res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+    if (keepAlive) clearInterval(keepAlive);
+    res.end();
+  }
+});
+
+/**
  * POST /api/module-packs/:id/ideation
  *
  * Run ideation/self-interview for a module pack
@@ -330,6 +750,13 @@ router.post('/:id/ideation', async (req, res) => {
     if (!modulePack.expert_context?.summary) {
       return res.status(400).json({
         error: 'Expert research must be completed before ideation'
+      });
+    }
+
+    // If mode is interactive, redirect to interview-chat
+    if (mode === 'interactive') {
+      return res.status(400).json({
+        error: 'Use /interview-chat endpoint for interactive mode'
       });
     }
 
@@ -363,7 +790,9 @@ router.post('/:id/ideation', async (req, res) => {
         topic: modulePack.original_request.prompt,
         domains: modulePack.original_request.domains,
         region: modulePack.config.region,
-        additionalContext: modulePack.original_request.additional_context
+        additionalContext: modulePack.original_request.additional_context,
+        classification: modulePack.domain_classification || null,
+        refinedOntology: modulePack.refined_ontology || null
       },
       (progress) => {
         writeEvent({ ...progress, phase: 'ideation' });
@@ -802,7 +1231,7 @@ router.patch('/:id', async (req, res) => {
  * Run the full pipeline: expert research -> ideation -> module generation
  */
 async function runFullPipeline(modulePack, request, writeEvent) {
-  const { topic, domains, region, additionalContext, researchDepth, locale } = request;
+  const { topic, domains, region, additionalContext, researchDepth, locale, selectedDomain, selectedSubDomain, interviewMode } = request;
 
   // Helper to write event AND save to pack's progress log using atomic update
   const logAndWrite = async (event) => {
@@ -829,6 +1258,69 @@ async function runFullPipeline(modulePack, request, writeEvent) {
   };
 
   try {
+    // Phase 0: Domain Classification
+    await logAndWrite({
+      status: 'phase_starting',
+      phase: 'domain_classification',
+      message: 'Starting domain classification...'
+    });
+
+    modulePack.status = 'classifying';
+    modulePack.current_phase = 'domain_classification';
+    await modulePack.save();
+
+    const classificationAgent = createDomainClassificationAgent();
+    const classification = await classificationAgent.classifyDomain({
+      topic,
+      domains,
+      region,
+      projectName: modulePack.original_request.project_name,
+      fundingBody: modulePack.original_request.funding_body,
+      additionalContext
+    }, async (progress) => {
+      await logAndWrite({ ...progress, phase: 'domain_classification' });
+    });
+
+    // If user pre-selected a domain, override
+    if (selectedDomain) {
+      classification.primary_domain = selectedDomain;
+      if (selectedSubDomain) {
+        classification.sub_domain = selectedSubDomain;
+      }
+    }
+
+    // Auto-confirm in full pipeline mode
+    classification.user_confirmed = true;
+
+    modulePack.domain_classification = classification;
+    modulePack.progress.domain_classification_complete = true;
+    await modulePack.save();
+
+    await logAndWrite({
+      status: 'phase_complete',
+      phase: 'domain_classification',
+      message: `Domain classified: ${classification.primary_domain} > ${classification.sub_domain}`
+    });
+
+    // Emit full classification result with ontology details
+    await logAndWrite({
+      status: 'classification_result',
+      phase: 'domain_classification',
+      message: `${classification.primary_domain} > ${classification.sub_domain}`,
+      details: {
+        primary_domain: classification.primary_domain,
+        sub_domain: classification.sub_domain,
+        confidence: classification.confidence,
+        secondary_domains: classification.secondary_domains,
+        capabilities: classification.ontology?.capabilities || [],
+        data_entities: classification.ontology?.data_entities || [],
+        compliance_domains: classification.ontology?.compliance_domains || [],
+        workflow_patterns: classification.ontology?.workflow_patterns || [],
+        regional_factors: classification.regional_factors,
+        research_tracks: classification.research_tracks_needed
+      }
+    });
+
     // Phase 1: Expert Research
     await logAndWrite({
       status: 'phase_starting',
@@ -846,7 +1338,8 @@ async function runFullPipeline(modulePack, request, writeEvent) {
       domains,
       region,
       depth: researchDepth,
-      additionalContext
+      additionalContext,
+      classification
     }, async (progress) => {
       await logAndWrite({ ...progress, phase: 'expert_research' });
     });
@@ -861,7 +1354,56 @@ async function runFullPipeline(modulePack, request, writeEvent) {
       message: `Expert research complete. ${expertContext.research_categories?.length || 0} categories, ${expertContext.recommended_modules?.length || 0} modules recommended.`
     });
 
-    // Phase 2: Ideation
+    // Phase 2.5: Ontology Refinement
+    await logAndWrite({
+      status: 'phase_starting',
+      phase: 'ontology_refinement',
+      message: 'Refining ontology from research findings...'
+    });
+
+    modulePack.current_phase = 'ontology_refinement';
+    await modulePack.save();
+
+    const refinedOntology = await classificationAgent.refineOntologyFromResearch(
+      classification,
+      expertContext,
+      async (progress) => {
+        await logAndWrite({ ...progress, phase: 'ontology_refinement' });
+      }
+    );
+
+    modulePack.refined_ontology = refinedOntology;
+    modulePack.progress.ontology_refinement_complete = true;
+    await modulePack.save();
+
+    await logAndWrite({
+      status: 'phase_complete',
+      phase: 'ontology_refinement',
+      message: `Ontology refined. ${refinedOntology.capabilities?.filter(c => c.confirmed_by_research).length || 0} capabilities confirmed.`
+    });
+
+    // Phase 3: Ideation - respects interview mode
+    if (interviewMode === 'interactive' || interviewMode === 'hybrid') {
+      // Pause pipeline for interactive interview
+      modulePack.status = 'ideating';
+      modulePack.current_phase = 'ideation';
+      await modulePack.save();
+
+      await logAndWrite({
+        status: 'interview_required',
+        phase: 'ideation',
+        message: interviewMode === 'interactive'
+          ? 'Interactive interview ready. Please answer the questions to define your requirements.'
+          : 'Hybrid interview ready. Answer questions or let the AI self-answer.',
+        interviewMode
+      });
+
+      // Pipeline stops here - frontend will show InterviewChat
+      // After interview completes, frontend calls /generate-modules to finish
+      return;
+    }
+
+    // Self-interview mode - run automatically
     await logAndWrite({
       status: 'phase_starting',
       phase: 'ideation',
@@ -875,7 +1417,7 @@ async function runFullPipeline(modulePack, request, writeEvent) {
     const ideationAgent = createIdeationAgent();
     const ideationDocument = await ideationAgent.conductSelfInterview(
       expertContext,
-      { topic, domains, region, additionalContext, locale },
+      { topic, domains, region, additionalContext, locale, classification, refinedOntology },
       async (progress) => {
         await logAndWrite({ ...progress, phase: 'ideation' });
       }
@@ -892,7 +1434,7 @@ async function runFullPipeline(modulePack, request, writeEvent) {
       message: `Ideation complete. ${ideationDocument.proposed_modules?.length || 0} modules planned.`
     });
 
-    // Phase 3: Module Generation
+    // Phase 4: Module Generation
     await logAndWrite({
       status: 'phase_starting',
       phase: 'module_generation',
@@ -909,7 +1451,8 @@ async function runFullPipeline(modulePack, request, writeEvent) {
       expertContext,
       ideationDocument,
       config: modulePack.config,
-      originalRequest: modulePack.original_request
+      originalRequest: modulePack.original_request,
+      refinedOntology
     }, async (progress) => {
       await logAndWrite({ ...progress, phase: 'module_generation' });
     });

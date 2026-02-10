@@ -9,9 +9,7 @@ interface PublicLayoutProps {
 const PublicLayout: React.FC<PublicLayoutProps> = ({ children, currentPath, onNavigate }) => {
   const navItems = [
     { path: '/', label: 'Home' },
-    { path: '/factory', label: 'App Factory' },
-    { path: '/about', label: 'About' },
-    { path: '/research', label: 'Examples' }
+    { path: '/factory', label: 'App Factory' }
   ];
 
   return (
@@ -107,16 +105,6 @@ const PublicLayout: React.FC<PublicLayoutProps> = ({ children, currentPath, onNa
             <div>
               <h3 className="font-bold mb-4">Resources</h3>
               <ul className="space-y-2 text-sm text-slate-400">
-                <li>
-                  <button onClick={() => onNavigate('/about')} className="hover:text-white transition-colors">
-                    About
-                  </button>
-                </li>
-                <li>
-                  <button onClick={() => onNavigate('/research')} className="hover:text-white transition-colors">
-                    Examples
-                  </button>
-                </li>
                 <li>
                   <a href="https://github.com/raavin/Chameleon" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">
                     Documentation

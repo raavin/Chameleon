@@ -59,7 +59,7 @@ export class IdeationAgent {
    * @returns {Promise<object>} - Ideation document
    */
   async conductSelfInterview(expertContext, request, onProgress = null) {
-    const { topic, domains, region, additionalContext, locale } = request;
+    const { topic, domains, region, additionalContext, locale, classification = null, refinedOntology = null } = request;
 
     this.emitProgress(onProgress, {
       phase: 'self_interview',
@@ -92,7 +92,7 @@ export class IdeationAgent {
         message: 'Generating comprehensive interview questions...'
       });
 
-      const questions = await this.generateInterviewQuestions(expertContext, topic, domains, region, locale);
+      const questions = await this.generateInterviewQuestions(expertContext, topic, domains, region, locale, classification, refinedOntology);
 
       // Emit individual question preview events
       const categories = [...new Set(questions.map(q => q.category))];
@@ -174,7 +174,7 @@ export class IdeationAgent {
         message: 'Designing module architecture...'
       });
 
-      const moduleDesign = await this.designModules(requirements, expertContext, domains);
+      const moduleDesign = await this.designModules(requirements, expertContext, domains, classification, refinedOntology);
       ideationDocument.proposed_modules = moduleDesign.modules;
       ideationDocument.data_model_outline = moduleDesign.dataModel;
       ideationDocument.workflow_outline = moduleDesign.workflows;
@@ -369,10 +369,18 @@ Generate 15-25 essential questions.
   /**
    * Generate comprehensive interview questions for self-interview
    */
-  async generateInterviewQuestions(expertContext, topic, domains, region, locale) {
+  async generateInterviewQuestions(expertContext, topic, domains, region, locale, classification = null, refinedOntology = null) {
+    let ontologyContext = '';
+    if (classification) {
+      ontologyContext += `\n**Classified Domain:** ${classification.primary_domain} > ${classification.sub_domain}`;
+    }
+    if (refinedOntology?.capabilities?.length > 0) {
+      ontologyContext += `\n**Ontology Capabilities to Cover:**\n${refinedOntology.capabilities.map(c => `- ${c.name}: ${c.sub_capabilities?.join(', ') || ''}`).join('\n')}`;
+    }
+
     const prompt = `
 You are conducting a thorough self-interview to define requirements for a ${topic} management application in ${region}.
-${locale && locale !== 'en-US' ? `\n**Locale:** ${locale}\nIf the locale is not English, consider local language for field labels and cultural adaptations relevant to this locale.\n` : ''}
+${locale && locale !== 'en-US' ? `\n**Locale:** ${locale}\nIf the locale is not English, consider local language for field labels and cultural adaptations relevant to this locale.\n` : ''}${ontologyContext}
 
 **Expert Context:**
 ${JSON.stringify({
@@ -666,7 +674,20 @@ Be comprehensive. Extract ALL requirements mentioned or implied.
   /**
    * Design module architecture based on requirements
    */
-  async designModules(requirements, expertContext, requestedDomains) {
+  async designModules(requirements, expertContext, requestedDomains, classification = null, refinedOntology = null) {
+    let ontologySection = '';
+    if (refinedOntology?.capabilities?.length > 0) {
+      ontologySection = `\n**ONTOLOGY-DRIVEN CAPABILITIES (use to seed module design):**\n`;
+      ontologySection += refinedOntology.capabilities
+        .filter(c => c.confirmed_by_research !== false)
+        .map(c => `- ${c.name} → ${c.mapped_module_type || 'custom'}: ${c.sub_capabilities?.join(', ') || ''}`)
+        .join('\n');
+      ontologySection += '\n';
+    }
+    if (refinedOntology?.workflow_patterns?.length > 0) {
+      ontologySection += `\n**ONTOLOGY WORKFLOW PATTERNS:**\n${refinedOntology.workflow_patterns.join('\n')}\n`;
+    }
+
     const prompt = `
 Design a modular application architecture based on these requirements.
 
@@ -675,7 +696,7 @@ ${JSON.stringify(requirements, null, 2).substring(0, 20000)}
 
 **Recommended Modules from Expert Analysis:**
 ${JSON.stringify(expertContext.recommended_modules, null, 2)}
-
+${ontologySection}
 **Requested Domains:** ${requestedDomains?.join(', ') || 'To be determined'}
 
 **Task:**
@@ -733,17 +754,46 @@ Module types: user-management, client-entity, data-collection, data-views, commu
     try {
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+        const design = JSON.parse(jsonMatch[0]);
+        return this.ensureClientEntityModule(design);
       }
     } catch (e) {
       console.error('Failed to parse module design:', e);
     }
 
-    return {
+    return this.ensureClientEntityModule({
       modules: expertContext.recommended_modules || [],
       dataModel: { entities: [] },
       workflows: []
-    };
+    });
+  }
+
+  /**
+   * Ensure a client-entity module exists in the design.
+   * This module is required so users can create client records linked to other modules.
+   */
+  ensureClientEntityModule(design) {
+    if (!design.modules) design.modules = [];
+    const hasClientEntity = design.modules.some(m => m.module_type === 'client-entity');
+    if (!hasClientEntity) {
+      design.modules.unshift({
+        module_type: 'client-entity',
+        title: 'Client Management',
+        description: 'Central client/subject profile management with identity fields that link to all other modules via subject_id',
+        priority: 1,
+        estimated_complexity: 'medium',
+        dependencies: [],
+        key_features: [
+          'Client profile CRUD',
+          'Identity fields (name, ID, contact)',
+          'Subject identifier for cross-module linking',
+          'Status tracking'
+        ],
+        domains: ['clients'],
+        requirements_addressed: []
+      });
+    }
+    return design;
   }
 
   /**
@@ -829,6 +879,209 @@ Return ONLY the summary text (no JSON).
       }
     }
     return insights;
+  }
+
+  /**
+   * Conduct interactive interview - process a single user message and return next question
+   * @param {Array} conversationHistory - Full conversation so far
+   * @param {object} expertContext - Expert research context
+   * @param {object} classification - Domain classification
+   * @param {object} refinedOntology - Refined ontology from research
+   * @param {object} request - Original request details
+   * @returns {Promise<object>} - Next question or completion signal
+   */
+  async conductInteractiveInterview(conversationHistory, expertContext, classification, refinedOntology, request) {
+    const { topic, domains, region } = request;
+    const allCategories = Object.values(INTERVIEW_CATEGORIES);
+
+    // Determine which categories have been covered
+    const coveredCategories = new Set(
+      conversationHistory
+        .filter(m => m.role === 'agent' && m.category)
+        .map(m => m.category)
+    );
+    const answeredCategories = new Set(
+      conversationHistory
+        .filter(m => m.role === 'user' && m.question_id)
+        .map(m => {
+          const agentMsg = conversationHistory.find(am => am.id === m.question_id);
+          return agentMsg?.category;
+        })
+        .filter(Boolean)
+    );
+
+    const progress = Math.round((answeredCategories.size / allCategories.length) * 100);
+    const remainingCategories = allCategories.filter(c => !answeredCategories.has(c));
+
+    // Check if we've covered enough
+    if (remainingCategories.length === 0 || progress >= 100) {
+      return {
+        type: 'complete',
+        interview_progress: 100,
+        message: 'All categories have been covered. Ready to synthesize requirements.'
+      };
+    }
+
+    // Build domain context for the system prompt
+    let domainContext = '';
+    if (classification) {
+      domainContext = `\nYou are an expert in ${classification.primary_domain} > ${classification.sub_domain}.`;
+    }
+    if (refinedOntology?.capabilities?.length > 0) {
+      domainContext += `\nKey capabilities to explore: ${refinedOntology.capabilities.map(c => c.name).join(', ')}`;
+    }
+
+    const conversationText = conversationHistory
+      .map(m => `${m.role.toUpperCase()}: ${m.content}`)
+      .join('\n\n');
+
+    const prompt = `
+You are conducting an interactive interview to define requirements for a ${topic} application in ${region}.${domainContext}
+
+**Expert Context Summary:**
+${expertContext.summary?.substring(0, 3000) || ''}
+
+**Key Compliance Requirements:**
+${expertContext.compliance_requirements?.slice(0, 5).join('\n') || 'None identified'}
+
+**Interview Conversation So Far:**
+${conversationText || '(No conversation yet - ask the first question)'}
+
+**Categories Covered:** ${[...answeredCategories].join(', ') || 'None yet'}
+**Categories Remaining:** ${remainingCategories.join(', ')}
+
+**Task:**
+Generate the next interview question. The question should:
+1. Be conversational and natural (not robotic)
+2. Focus on one of the remaining categories: ${remainingCategories[0]}
+3. Build on any previous answers if relevant
+4. Be clear enough for a non-technical stakeholder
+
+Return ONLY valid JSON:
+{
+  "question": "Your conversational question here?",
+  "category": "${remainingCategories[0]}",
+  "question_id": "q_${conversationHistory.length + 1}",
+  "follow_up": false,
+  "interview_progress": ${progress}
+}
+`;
+
+    const result = await this.interviewModel.generateContent(prompt);
+    const responseText = result.response.text();
+
+    try {
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return {
+          type: 'question',
+          ...parsed,
+          interview_progress: progress
+        };
+      }
+    } catch (e) {
+      console.error('Failed to parse interactive question:', e);
+    }
+
+    // Fallback question
+    return {
+      type: 'question',
+      question: `Can you tell me about the ${remainingCategories[0]} aspects of your ${topic} project?`,
+      category: remainingCategories[0],
+      question_id: `q_${conversationHistory.length + 1}`,
+      follow_up: false,
+      interview_progress: progress
+    };
+  }
+
+  /**
+   * Synthesize ideation document from interactive conversation
+   * @param {Array} conversationHistory - Full conversation transcript
+   * @param {object} expertContext - Expert research context
+   * @param {object} classification - Domain classification
+   * @param {object} refinedOntology - Refined ontology
+   * @param {object} request - Original request
+   * @param {function} onProgress - Progress callback
+   * @returns {Promise<object>} - Ideation document
+   */
+  async synthesizeFromConversation(conversationHistory, expertContext, classification, refinedOntology, request, onProgress = null) {
+    this.emitProgress(onProgress, {
+      phase: 'synthesizing',
+      status: 'starting',
+      message: 'Synthesizing requirements from interview conversation...'
+    });
+
+    // Convert conversation to Q&A format for existing synthesis pipeline
+    const answeredQuestions = conversationHistory
+      .filter(m => m.role === 'agent')
+      .map(agentMsg => {
+        const userResponse = conversationHistory.find(
+          m => m.role === 'user' && m.question_id === agentMsg.id
+        );
+        return {
+          question_id: agentMsg.id || agentMsg.question_id,
+          category: agentMsg.category || 'requirements',
+          question: agentMsg.content,
+          response: userResponse?.content || '',
+          insights_extracted: [],
+          answered_by: userResponse ? 'human' : 'ai_self',
+          answered_at: userResponse?.timestamp || new Date()
+        };
+      });
+
+    // Use existing synthesis pipeline
+    this.emitProgress(onProgress, {
+      phase: 'synthesizing_requirements',
+      status: 'in_progress',
+      message: 'Extracting requirements from conversation...'
+    });
+
+    const requirements = await this.synthesizeRequirements(answeredQuestions, expertContext);
+
+    this.emitProgress(onProgress, {
+      phase: 'designing_modules',
+      status: 'in_progress',
+      message: 'Designing module architecture from conversation insights...'
+    });
+
+    const moduleDesign = await this.designModules(
+      requirements,
+      expertContext,
+      request.domains || [],
+      classification,
+      refinedOntology
+    );
+
+    this.emitProgress(onProgress, {
+      phase: 'risk_assessment',
+      status: 'in_progress',
+      message: 'Assessing implementation risks...'
+    });
+
+    const risks = await this.assessRisks(moduleDesign, requirements, expertContext);
+
+    const ideationDocument = {
+      summary: '',
+      interview_mode: 'interactive',
+      questions_answered: answeredQuestions,
+      requirements,
+      proposed_modules: moduleDesign.modules,
+      data_model_outline: moduleDesign.dataModel,
+      workflow_outline: moduleDesign.workflows,
+      risk_assessment: risks,
+      generated_at: new Date()
+    };
+
+    ideationDocument.summary = await this.generateSummary(ideationDocument, request.topic, request.region);
+
+    this.emitProgress(onProgress, {
+      phase: 'complete',
+      status: 'success',
+      message: 'Conversation synthesis complete'
+    });
+
+    return ideationDocument;
   }
 
   /**

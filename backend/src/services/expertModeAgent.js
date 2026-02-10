@@ -19,6 +19,31 @@ import { DeepResearchService, RESEARCH_CATEGORIES } from './deepResearchService.
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 /**
+ * Research sections ordered by importance (legislative/technical first).
+ * Each section becomes its own focused Deep Research API call.
+ */
+const RESEARCH_SECTIONS = [
+  { id: 'legislative', title: 'Legislative & Regulatory Framework',
+    focus: 'Current laws, regulations, licensing, accreditation, compliance mandates, privacy/data protection, upcoming changes' },
+  { id: 'technical', title: 'Technical & Operational Requirements',
+    focus: 'Data collection needs, workflow patterns, integration requirements, reporting/analytics, user roles and access' },
+  { id: 'best_practices', title: 'Best Practices & Standards',
+    focus: 'Industry standards, frameworks, quality assurance, professional guidelines, outcome measurement, documentation requirements' },
+  { id: 'stakeholder', title: 'Stakeholder Analysis',
+    focus: 'Primary users and needs, secondary stakeholders, client/service recipient needs, regulatory oversight bodies' },
+  { id: 'historical', title: 'Historical Context',
+    focus: 'Origin and evolution, key milestones, how practices changed over time, historical challenges' },
+  { id: 'case_studies', title: 'Real-World Case Studies',
+    focus: 'Success stories from the region and similar regions, innovative approaches, lessons from failures, benchmark organizations' },
+  { id: 'local_landscape', title: 'Local Landscape Analysis',
+    focus: 'Key organizations and stakeholders, government agencies, funding bodies and requirements, professional associations' },
+  { id: 'risks', title: 'Risks & Challenges',
+    focus: 'Common implementation challenges, compliance risks, technology risks, change management challenges' },
+  { id: 'cultural', title: 'Cultural Context',
+    focus: 'Cultural norms affecting service delivery, language considerations, sensitivities, community/family dynamics, trust factors, accessibility for marginalized groups' },
+];
+
+/**
  * Expert Mode Agent class
  */
 export class ExpertModeAgent {
@@ -48,7 +73,8 @@ export class ExpertModeAgent {
       region,
       depth = 'comprehensive',
       focusAreas = [],
-      additionalContext = ''
+      additionalContext = '',
+      classification = null
     } = request;
 
     const expertContext = {
@@ -69,30 +95,26 @@ export class ExpertModeAgent {
       let rawResearchOutput = '';
 
       if (depth === 'comprehensive') {
-        // Use Deep Research API for comprehensive analysis (slower but thorough)
+        // Use batched Deep Research API — one focused call per research section
         this.emitProgress(onProgress, {
           phase: 'deep_research',
           status: 'starting',
-          message: 'Initiating Google Deep Research Agent for comprehensive analysis (this may take 5-15 minutes)...'
+          message: `Initiating batched Deep Research: ${RESEARCH_SECTIONS.length} focused sections...`
         });
 
-        const deepResearchQuery = this.buildDeepResearchQuery(topic, domains, region, focusAreas, additionalContext);
-
-        const deepResearchResult = await this.deepResearch.conductResearch(
-          deepResearchQuery,
-          region,
-          { depth, focusAreas },
-          (progress) => this.emitProgress(onProgress, { phase: 'deep_research', ...progress })
+        const batchResult = await this.conductBatchedDeepResearch(
+          { topic, domains, region, classification },
+          onProgress
         );
 
-        expertContext.deep_research_interaction_id = deepResearchResult.interactionId;
-        expertContext.deep_research_sources = deepResearchResult.structured?.sources || [];
-        rawResearchOutput = deepResearchResult.rawOutput;
+        rawResearchOutput = batchResult.combinedOutput;
+        expertContext.deep_research_sections = [...batchResult.completedSections, ...batchResult.failedSections];
+        expertContext.deep_research_sources = batchResult.sources;
 
         this.emitProgress(onProgress, {
           phase: 'deep_research',
           status: 'complete',
-          message: 'Deep research complete. Processing results...'
+          message: `Deep research complete. ${batchResult.completedSections.length}/${RESEARCH_SECTIONS.length} sections succeeded.`
         });
       } else {
         // Use regular Gemini for quick/standard (faster, still good quality)
@@ -102,7 +124,7 @@ export class ExpertModeAgent {
           message: `Conducting ${depth} research using Gemini...`
         });
 
-        rawResearchOutput = await this.conductFastResearch(topic, domains, region, depth, focusAreas, additionalContext, onProgress);
+        rawResearchOutput = await this.conductFastResearch(topic, domains, region, depth, focusAreas, additionalContext, onProgress, classification);
 
         this.emitProgress(onProgress, {
           phase: 'research',
@@ -194,7 +216,8 @@ export class ExpertModeAgent {
       const moduleRecommendations = await this.generateModuleRecommendations(
         synthesis,
         categorizedResearch,
-        domains
+        domains,
+        classification
       );
 
       expertContext.recommended_modules = moduleRecommendations;
@@ -226,13 +249,42 @@ export class ExpertModeAgent {
   /**
    * Build comprehensive deep research query
    */
-  buildDeepResearchQuery(topic, domains, region, focusAreas, additionalContext) {
+  buildDeepResearchQuery(topic, domains, region, focusAreas, additionalContext, classification = null) {
     let query = `As a domain expert, conduct comprehensive research to become an authority on:\n\n`;
     query += `**Topic:** ${topic}\n`;
     query += `**Geographic Region:** ${region}\n`;
 
     if (domains.length > 0) {
       query += `**Service Domains:** ${domains.join(', ')}\n`;
+    }
+
+    // Add classification context if available
+    if (classification) {
+      query += `\n**CLASSIFIED DOMAIN:** ${classification.primary_domain} > ${classification.sub_domain}\n`;
+      if (classification.secondary_domains?.length > 0) {
+        query += `**Secondary Domains:** ${classification.secondary_domains.join(', ')}\n`;
+      }
+      if (classification.ontology?.capabilities?.length > 0) {
+        query += `\n**ONTOLOGY CAPABILITIES TO INVESTIGATE:**\n`;
+        classification.ontology.capabilities.forEach((cap, i) => {
+          query += `${i + 1}. ${cap.name}: ${cap.sub_capabilities?.join(', ') || ''}\n`;
+        });
+      }
+      if (classification.research_tracks_needed?.length > 0) {
+        query += `\n**SPECIFIC RESEARCH TRACKS:**\n`;
+        classification.research_tracks_needed.forEach((track, i) => {
+          query += `${i + 1}. ${track}\n`;
+        });
+      }
+      if (classification.regional_factors) {
+        if (classification.regional_factors.key_legislation?.length > 0) {
+          query += `\n**KEY LEGISLATION TO RESEARCH:** ${classification.regional_factors.key_legislation.join(', ')}\n`;
+        }
+        if (classification.regional_factors.regulatory_bodies?.length > 0) {
+          query += `**REGULATORY BODIES:** ${classification.regional_factors.regulatory_bodies.join(', ')}\n`;
+        }
+      }
+      query += '\n';
     }
 
     query += `\n**Research Mandate:**\n`;
@@ -324,10 +376,162 @@ export class ExpertModeAgent {
   }
 
   /**
+   * Build a focused research query for a single section
+   */
+  buildFocusedResearchQuery(section, topic, domains, region, classification) {
+    let query = `Conduct focused research on the ${section.title} for "${topic}" in ${region}.\n\n`;
+
+    if (domains.length > 0) {
+      query += `**Service Domains:** ${domains.join(', ')}\n`;
+    }
+
+    // Add classification context if available
+    if (classification) {
+      query += `**Classified Domain:** ${classification.primary_domain} > ${classification.sub_domain}\n`;
+      if (classification.ontology?.capabilities?.length > 0) {
+        query += `**Ontology Capabilities:**\n`;
+        classification.ontology.capabilities.forEach((cap, i) => {
+          query += `${i + 1}. ${cap.name}: ${cap.sub_capabilities?.join(', ') || ''}\n`;
+        });
+      }
+      if (classification.regional_factors?.key_legislation?.length > 0) {
+        query += `**Key Legislation:** ${classification.regional_factors.key_legislation.join(', ')}\n`;
+      }
+      if (classification.regional_factors?.regulatory_bodies?.length > 0) {
+        query += `**Regulatory Bodies:** ${classification.regional_factors.regulatory_bodies.join(', ')}\n`;
+      }
+    }
+
+    query += `\n**Research focus areas:** ${section.focus}\n\n`;
+
+    // Legislative section gets extra structured-reference requirements
+    if (section.id === 'legislative') {
+      query += `**CRITICAL — Structured References Required:**\n`;
+      query += `For every law, regulation, or mandate you mention, provide:\n`;
+      query += `- Exact act/regulation name\n`;
+      query += `- Section or clause numbers\n`;
+      query += `- Effective date or year enacted\n`;
+      query += `- Governing body responsible for enforcement\n`;
+      query += `- Penalties or consequences for non-compliance\n\n`;
+    }
+
+    query += `**IMPORTANT:** For every claim, requirement, or recommendation, provide the specific source reference `;
+    query += `(act name, section number, standard ID, organization name, URL) so it can be traced for governance purposes.\n\n`;
+    query += `Note any region-specific considerations for ${region}.\n`;
+
+    return query;
+  }
+
+  /**
+   * Conduct batched deep research — one focused API call per section
+   */
+  async conductBatchedDeepResearch(request, onProgress) {
+    const { topic, domains, region, classification } = request;
+    const completed = [];
+    const failed = [];
+    let combinedOutput = '';
+    let allSources = [];
+
+    for (let i = 0; i < RESEARCH_SECTIONS.length; i++) {
+      const section = RESEARCH_SECTIONS[i];
+
+      this.emitProgress(onProgress, {
+        phase: 'deep_research',
+        status: 'section_starting',
+        message: `Researching ${i + 1}/${RESEARCH_SECTIONS.length}: ${section.title}...`,
+        details: { section_id: section.id, section_index: i, total_sections: RESEARCH_SECTIONS.length }
+      });
+
+      try {
+        const query = this.buildFocusedResearchQuery(section, topic, domains, region, classification);
+        const result = await this.deepResearch.conductResearch(query, region, { depth: 'comprehensive' }, (progress) => {
+          this.emitProgress(onProgress, {
+            phase: 'deep_research',
+            status: 'section_polling',
+            message: `${section.title}: ${progress.message || progress.status}`,
+            details: { section_id: section.id, section_title: section.title, section_focus: section.focus, ...progress }
+          });
+        });
+
+        const output = result.rawOutput;
+
+        if (result.timedOut && output.length > 0) {
+          // Partial success — keep what we got
+          combinedOutput += `\n\n## ${section.title} (Partial)\n\n${output}`;
+          allSources.push(...(result.structured?.sources || []));
+          completed.push({
+            section_id: section.id, title: section.title, status: 'completed',
+            interaction_id: result.interactionId,
+            content_length: output.length, completed_at: new Date()
+          });
+
+          this.emitProgress(onProgress, {
+            phase: 'deep_research',
+            status: 'section_partial',
+            message: `${section.title} timed out but salvaged ${output.length} chars of partial content. ${completed.length}/${RESEARCH_SECTIONS.length} done.`,
+          });
+        } else if (result.timedOut && output.length === 0) {
+          // True timeout with no content — API is likely rate-limited or stuck.
+          // Don't continue to remaining sections; they'll hit the same wall.
+          failed.push({
+            section_id: section.id, title: section.title, status: 'failed',
+            error: 'Timed out with no content', completed_at: new Date()
+          });
+
+          this.emitProgress(onProgress, {
+            phase: 'deep_research',
+            status: 'section_failed',
+            message: `${section.title} timed out with no content.`,
+            details: { section_id: section.id }
+          });
+
+          const remaining = RESEARCH_SECTIONS.length - i - 1;
+          if (remaining > 0) {
+            this.emitProgress(onProgress, {
+              phase: 'deep_research',
+              status: 'batch_stopped',
+              message: `Stopping research batch — API appears rate-limited or unresponsive. Skipping ${remaining} remaining section(s). Continuing pipeline with ${completed.length} completed section(s).`
+            });
+          }
+          break;
+        } else {
+          // Normal success
+          combinedOutput += `\n\n## ${section.title}\n\n${output}`;
+          allSources.push(...(result.structured?.sources || []));
+          completed.push({
+            section_id: section.id, title: section.title, status: 'completed',
+            interaction_id: result.interactionId,
+            content_length: output.length, completed_at: new Date()
+          });
+
+          this.emitProgress(onProgress, {
+            phase: 'deep_research',
+            status: 'section_complete',
+            message: `${section.title} complete (${output.length} chars). ${completed.length}/${RESEARCH_SECTIONS.length} done.`,
+          });
+        }
+      } catch (err) {
+        failed.push({
+          section_id: section.id, title: section.title, status: 'failed',
+          error: err.message, completed_at: new Date()
+        });
+
+        this.emitProgress(onProgress, {
+          phase: 'deep_research',
+          status: 'section_failed',
+          message: `${section.title} failed: ${err.message}. Skipping to next section.`,
+        });
+      }
+    }
+
+    return { combinedOutput, completedSections: completed, failedSections: failed, sources: allSources };
+  }
+
+  /**
    * Conduct fast research using regular Gemini (for quick/standard modes)
    * Much faster than Deep Research but still produces quality output
    */
-  async conductFastResearch(topic, domains, region, depth, focusAreas, additionalContext, onProgress) {
+  async conductFastResearch(topic, domains, region, depth, focusAreas, additionalContext, onProgress, classification = null) {
     const depthConfig = {
       quick: {
         description: 'brief overview',
@@ -349,13 +553,24 @@ export class ExpertModeAgent {
       message: `Researching: ${topic} in ${region}...`
     });
 
+    let classificationContext = '';
+    if (classification) {
+      classificationContext = `\n**Classified Domain:** ${classification.primary_domain} > ${classification.sub_domain}`;
+      if (classification.ontology?.capabilities?.length > 0) {
+        classificationContext += `\n**Ontology Capabilities to Investigate:**\n${classification.ontology.capabilities.map(c => `- ${c.name}: ${c.sub_capabilities?.join(', ') || ''}`).join('\n')}`;
+      }
+      if (classification.research_tracks_needed?.length > 0) {
+        classificationContext += `\n**Specific Research Tracks:**\n${classification.research_tracks_needed.map((t, i) => `${i + 1}. ${t}`).join('\n')}`;
+      }
+    }
+
     const prompt = `
 You are an expert researcher conducting a ${config.description} on "${topic}" in ${region}.
 
 **Research Scope:** ${depth} (${config.wordCount}, ${config.sections})
 ${domains.length > 0 ? `**Focus Domains:** ${domains.join(', ')}` : ''}
 ${focusAreas.length > 0 ? `**Priority Areas:** ${focusAreas.join(', ')}` : ''}
-${additionalContext ? `**Additional Context:** ${additionalContext}` : ''}
+${additionalContext ? `**Additional Context:** ${additionalContext}` : ''}${classificationContext}
 
 **Research Requirements:**
 Provide a comprehensive analysis covering:
@@ -589,7 +804,16 @@ Focus on information that directly impacts software design decisions.
   /**
    * Generate module recommendations based on expertise
    */
-  async generateModuleRecommendations(synthesis, categorizedResearch, requestedDomains) {
+  async generateModuleRecommendations(synthesis, categorizedResearch, requestedDomains, classification = null) {
+    let ontologySection = '';
+    if (classification?.ontology?.capabilities?.length > 0) {
+      ontologySection = `\n**ONTOLOGY CAPABILITIES (use as seed for recommendations):**\n`;
+      ontologySection += classification.ontology.capabilities.map(cap =>
+        `- ${cap.name} (mapped to: ${cap.mapped_module_type || 'custom'}): ${cap.sub_capabilities?.join(', ') || ''}`
+      ).join('\n');
+      ontologySection += '\n';
+    }
+
     const recommendationPrompt = `
 Based on the expert analysis, recommend the software modules needed for a complete solution.
 
@@ -601,7 +825,7 @@ ${synthesis.keyInsights.join('\n')}
 
 **Compliance Requirements:**
 ${synthesis.complianceRequirements.join('\n')}
-
+${ontologySection}
 **Requested Domains:** ${requestedDomains.join(', ') || 'To be determined'}
 
 **Task:**

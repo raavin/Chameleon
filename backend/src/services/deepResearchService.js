@@ -21,7 +21,7 @@ export class DeepResearchService {
   constructor(apiKey) {
     this.apiKey = apiKey;
     this.pollingInterval = 10000; // 10 seconds
-    this.maxPollingAttempts = 60; // 10 minutes max
+    this.maxPollingAttempts = 60; // 10 minutes max per section
   }
 
   /**
@@ -63,13 +63,137 @@ export class DeepResearchService {
   }
 
   /**
-   * Poll for interaction completion
+   * Create a streaming research interaction
+   * Returns the raw SSE response for processResearchStream to consume
+   */
+  async createStreamingInteraction(query, options = {}) {
+    const { tools = [] } = options;
+
+    const requestBody = {
+      input: query,
+      agent: DEEP_RESEARCH_AGENT,
+      background: true,
+      stream: true,
+      agent_config: {
+        type: 'deep-research',
+        thinking_summaries: 'auto'
+      }
+    };
+
+    if (tools.length > 0) {
+      requestBody.tools = tools;
+    }
+
+    const response = await fetch(`${GEMINI_API_BASE}/interactions?alt=sse`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': this.apiKey
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      let message = response.statusText;
+      try { message = JSON.parse(errorText).error?.message || message; } catch {}
+      throw new Error(`Deep Research streaming error: ${message}`);
+    }
+
+    return response;
+  }
+
+  /**
+   * Process an SSE stream from the Deep Research API
+   * Emits thought summaries in real-time via onProgress
+   */
+  async processResearchStream(response, onProgress = null) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let interactionId = null;
+    let finalInteraction = null;
+    let fullText = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // SSE events are separated by double newlines
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop(); // keep incomplete event in buffer
+
+        for (const part of parts) {
+          if (!part.trim()) continue;
+
+          const lines = part.split('\n');
+          let eventType = null;
+          let dataLines = [];
+
+          for (const line of lines) {
+            if (line.startsWith('event:')) {
+              eventType = line.slice(6).trim();
+            } else if (line.startsWith('data:')) {
+              dataLines.push(line.slice(5).trim());
+            }
+          }
+
+          const dataStr = dataLines.join('');
+          if (!dataStr) continue;
+
+          let data;
+          try { data = JSON.parse(dataStr); } catch { continue; }
+
+          const type = eventType || data.event_type;
+
+          if (type === 'interaction.start') {
+            interactionId = data.interaction?.id || data.id;
+            if (onProgress) {
+              onProgress({ status: 'started', interactionId });
+            }
+          } else if (type === 'content.delta') {
+            if (data.delta?.type === 'thought_summary') {
+              const thought = data.delta?.content?.text || '';
+              if (thought && onProgress) {
+                onProgress({ status: 'thinking', thought });
+              }
+            } else if (data.delta?.type === 'text') {
+              fullText += data.delta?.text || data.delta?.content?.text || '';
+            }
+          } else if (type === 'interaction.complete') {
+            finalInteraction = data.interaction || data;
+          } else if (type === 'error') {
+            throw new Error(`Research stream error: ${data.error?.message || JSON.stringify(data)}`);
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    // Use accumulated text or extract from final interaction
+    const output = fullText || this.extractOutput(finalInteraction || {});
+
+    return {
+      interactionId,
+      outputs: finalInteraction?.outputs || (output ? [{ text: output }] : []),
+      status: finalInteraction?.status || (output ? 'completed' : 'failed'),
+      timedOut: false
+    };
+  }
+
+  /**
+   * Poll for interaction completion (fallback if streaming unavailable)
    * @param {string} interactionId - The interaction ID to poll
    * @param {function} onProgress - Callback for progress updates
    * @returns {Promise<object>} - The completed interaction result
    */
   async pollInteraction(interactionId, onProgress = null) {
     let attempts = 0;
+    let lastResult = null;
 
     while (attempts < this.maxPollingAttempts) {
       const response = await fetch(`${GEMINI_API_BASE}/interactions/${interactionId}`, {
@@ -85,6 +209,7 @@ export class DeepResearchService {
       }
 
       const result = await response.json();
+      lastResult = result;
 
       if (onProgress) {
         onProgress({
@@ -106,7 +231,8 @@ export class DeepResearchService {
       await this.sleep(this.pollingInterval);
     }
 
-    throw new Error('Research timed out after maximum polling attempts');
+    // Return last result as partial — the API may have gathered content
+    return { ...lastResult, timedOut: true };
   }
 
   /**
@@ -144,40 +270,71 @@ export class DeepResearchService {
       onProgress({ phase: 'initiating', message: 'Starting deep research...' });
     }
 
-    // Create the research interaction (no system instructions - they're in the query)
-    const interaction = await this.createResearchInteraction(query);
+    let result;
+    let interactionId = null;
 
-    if (onProgress) {
-      onProgress({
-        phase: 'researching',
-        message: 'Deep research in progress...',
-        interactionId: interaction.id
+    try {
+      // Prefer streaming — gives real-time thought summaries, no blind polling
+      const sseResponse = await this.createStreamingInteraction(query);
+
+      result = await this.processResearchStream(sseResponse, (streamEvent) => {
+        if (streamEvent.status === 'started') {
+          interactionId = streamEvent.interactionId;
+          if (onProgress) {
+            onProgress({
+              phase: 'researching',
+              message: 'Research stream connected',
+              interactionId,
+              status: 'streaming'
+            });
+          }
+        } else if (streamEvent.status === 'thinking' && onProgress) {
+          onProgress({
+            phase: 'researching',
+            message: streamEvent.thought,
+            status: 'thinking'
+          });
+        }
+      });
+
+      interactionId = result.interactionId || interactionId;
+    } catch (streamErr) {
+      // Fallback to polling if streaming endpoint isn't available
+      console.warn('Streaming failed, falling back to polling:', streamErr.message);
+
+      if (onProgress) {
+        onProgress({ phase: 'researching', message: 'Falling back to polling mode...', status: 'polling' });
+      }
+
+      const interaction = await this.createResearchInteraction(query);
+      interactionId = interaction.id;
+
+      result = await this.pollInteraction(interaction.id, (pollStatus) => {
+        if (onProgress) {
+          onProgress({
+            phase: 'researching',
+            message: `Research in progress... (attempt ${pollStatus.attempt}/${pollStatus.maxAttempts})`,
+            status: pollStatus.status,
+            attempt: pollStatus.attempt,
+            maxAttempts: pollStatus.maxAttempts
+          });
+        }
       });
     }
-
-    // Poll for completion
-    const result = await this.pollInteraction(interaction.id, (pollStatus) => {
-      if (onProgress) {
-        onProgress({
-          phase: 'researching',
-          message: `Research in progress... (attempt ${pollStatus.attempt}/${pollStatus.maxAttempts})`,
-          status: pollStatus.status
-        });
-      }
-    });
 
     if (onProgress) {
       onProgress({ phase: 'processing', message: 'Processing research results...' });
     }
 
-    // Extract and structure the output
+    // Extract whatever output exists (may be partial if timed out)
     const rawOutput = this.extractOutput(result);
     const structuredOutput = this.structureResearchOutput(rawOutput, topic);
 
     return {
-      interactionId: interaction.id,
+      interactionId,
       rawOutput,
       structured: structuredOutput,
+      timedOut: result.timedOut || false,
       metadata: {
         topic,
         region,

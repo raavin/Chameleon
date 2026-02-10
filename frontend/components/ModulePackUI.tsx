@@ -7,14 +7,21 @@
  * - View and load generated manifests
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { UI } from './DesignSystem';
+import DomainPicker from './DomainPicker';
+import ClassificationConfirmation from './ClassificationConfirmation';
+import InterviewChat from './InterviewChat';
+import type { DomainClassification, RefinedOntology } from '../types';
+
+type PipelineStep = 'classification' | 'confirm_classification' | 'research' |
+  'ontology_refinement' | 'interview' | 'generation' | 'complete';
 
 interface ModulePack {
   id: string;
   name: string;
   description?: string;
-  status: 'draft' | 'researching' | 'ideating' | 'generating' | 'completed' | 'failed' | 'partial';
+  status: 'draft' | 'classifying' | 'researching' | 'ideating' | 'generating' | 'completed' | 'failed' | 'partial';
   current_phase: string;
   config: {
     region: string;
@@ -27,8 +34,13 @@ interface ModulePack {
     domains: string[];
     additional_context: string;
   };
+  interview_mode?: 'self_interview' | 'interactive' | 'hybrid';
+  domain_classification?: DomainClassification;
+  refined_ontology?: RefinedOntology;
   progress: {
+    domain_classification_complete?: boolean;
     expert_mode_complete: boolean;
+    ontology_refinement_complete?: boolean;
     ideation_complete: boolean;
     modules_planned: number;
     modules_generated: number;
@@ -117,6 +129,10 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
   // Filter manifests that aren't already in a pack
   const unpackedManifests = availableManifests.filter(m => !m.module_pack_id);
 
+  // Pipeline step tracking for overlay
+  const [pipelineStep, setPipelineStep] = useState<PipelineStep | null>(null);
+  const [pendingClassification, setPendingClassification] = useState<DomainClassification | null>(null);
+
   // Form state
   const [formData, setFormData] = useState({
     name: '',
@@ -127,10 +143,73 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
     fundingBody: '',
     additionalContext: '',
     researchDepth: 'comprehensive' as 'quick' | 'standard' | 'comprehensive',
-    locale: 'en-US'
+    locale: 'en-US',
+    selectedDomain: '',
+    selectedSubDomain: '',
+    interviewMode: 'self_interview' as 'self_interview' | 'interactive' | 'hybrid'
   });
   const [complianceFiles, setComplianceFiles] = useState<File[]>([]);
+  const [copyFeedback, setCopyFeedback] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Helper: append event with replace-in-place for section_polling.
+  // When a section completes/fails/partial, remove its polling line so the spinner stops.
+  const appendEvent = useCallback((event: ProgressEvent) => {
+    if (event.status === 'section_polling') {
+      setProgressEvents(prev => {
+        const last = prev[prev.length - 1];
+        if (last?.status === 'section_polling' &&
+            last?.details?.section_id === event.details?.section_id) {
+          return [...prev.slice(0, -1), event];
+        }
+        return [...prev, event];
+      });
+    } else if (event.status === 'section_complete' || event.status === 'section_partial' || event.status === 'section_failed') {
+      // Replace the matching section_polling entry (stops the spinner)
+      setProgressEvents(prev => {
+        const sectionId = event.details?.section_id;
+        const filtered = sectionId
+          ? prev.filter(e => !(e.status === 'section_polling' && e.details?.section_id === sectionId))
+          : prev;
+        return [...filtered, event];
+      });
+    } else {
+      setProgressEvents(prev => [...prev, event]);
+    }
+  }, []);
+
+  // Format progress events as readable log text
+  const formatLogText = useCallback(() => {
+    const lines = [
+      '=== Module Pack Generation Log ===',
+      `Pack: ${activeGeneration || 'Unknown'}`,
+      `Date: ${new Date().toISOString()}`,
+      ''
+    ];
+    for (const event of progressEvents) {
+      const time = event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : '--:--:--';
+      lines.push(`[${time}] [${event.phase || 'unknown'}] ${event.message}`);
+    }
+    return lines.join('\n');
+  }, [progressEvents, activeGeneration]);
+
+  const handleSaveLog = useCallback(() => {
+    const text = formatLogText();
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `module-pack-log-${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [formatLogText]);
+
+  const handleCopyLog = useCallback(async () => {
+    const text = formatLogText();
+    await navigator.clipboard.writeText(text);
+    setCopyFeedback(true);
+    setTimeout(() => setCopyFeedback(false), 2000);
+  }, [formatLogText]);
 
   // Load module packs on mount
   useEffect(() => {
@@ -200,7 +279,10 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
           fundingBody: formData.fundingBody,
           additionalContext: fullContext,
           researchDepth: formData.researchDepth,
-          autoStart
+          autoStart,
+          interviewMode: formData.interviewMode,
+          selectedDomain: formData.selectedDomain,
+          selectedSubDomain: formData.selectedSubDomain
         })
       });
 
@@ -216,6 +298,8 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
         const decoder = new TextDecoder();
 
         if (reader) {
+          let interviewPaused = false;
+
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -228,19 +312,33 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
                 const event = JSON.parse(line.slice(6));
                 if (event.done) {
                   // Don't close overlay - wait for user to click Continue
-                  setActiveGeneration(null);
-                  setGenerationComplete(true);
+                  setActiveGeneration(interviewPaused ? 'Interactive Interview' : null);
                   setCompletedPackId(event.modulePackId);
                   fetchModulePacks();
+                  // Only mark generation complete if we're not pausing for interview
+                  if (!interviewPaused) {
+                    setGenerationComplete(true);
+                  }
+                } else if (event.status === 'interview_required') {
+                  // Pipeline paused for interactive/hybrid interview
+                  interviewPaused = true;
+                  appendEvent(event);
+                  setPipelineStep('interview');
+                  setActiveGeneration('Interactive Interview');
+                  fetchModulePacks();
                 } else if (event.error) {
-                  setProgressEvents(prev => [...prev, {
+                  appendEvent({
                     phase: 'error',
                     status: 'failed',
                     message: event.error
-                  }]);
+                  });
                   setGenerationComplete(true);
                 } else {
-                  setProgressEvents(prev => [...prev, event]);
+                  appendEvent(event);
+                  // Capture pack ID from initial created event
+                  if (event.status === 'created' && event.modulePackId) {
+                    setCompletedPackId(event.modulePackId);
+                  }
                   // Capture completion summary
                   if (event.status === 'pipeline_complete' && event.summary) {
                     setCompletedSummary(event.summary);
@@ -271,7 +369,7 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
     }
   };
 
-  const runPhase = async (packId: string, phase: 'expert-research' | 'ideation' | 'generate-modules') => {
+  const runPhase = async (packId: string, phase: 'classify-domain' | 'expert-research' | 'refine-ontology' | 'ideation' | 'generate-modules') => {
     const phaseName = phase.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
     setProgressEvents([]);
@@ -311,7 +409,7 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
                 const packData = await packRes.json();
                 setSelectedPack(packData.modulePack);
               } else {
-                setProgressEvents(prev => [...prev, event]);
+                appendEvent(event);
                 // Capture summary from completion events
                 if (event.summary) {
                   setCompletedSummary(event.summary);
@@ -325,11 +423,11 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
       }
     } catch (err) {
       console.error(`Failed to run ${phase}:`, err);
-      setProgressEvents(prev => [...prev, {
+      appendEvent({
         phase: 'error',
         status: 'failed',
         message: `Failed to run ${phaseName}: ${err}`
-      }]);
+      });
       setGenerationComplete(true);
     } finally {
       setActiveGeneration(null);
@@ -364,6 +462,7 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
       case 'completed': return 'bg-emerald-500';
       case 'failed': return 'bg-red-500';
       case 'partial': return 'bg-amber-500';
+      case 'classifying':
       case 'researching':
       case 'ideating':
       case 'generating': return 'bg-blue-500 animate-pulse';
@@ -373,12 +472,14 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
 
   const getPhaseIcon = (phase: string) => {
     switch (phase) {
+      case 'domain_classification': return '~';
+      case 'ontology_refinement': return '#';
       case 'expert_research':
-      case 'deep_research': return '🔬';
+      case 'deep_research': return '?';
       case 'ideation':
-      case 'self_interview': return '💭';
+      case 'self_interview': return '*';
       case 'module_generation':
-      case 'generating': return '⚙️';
+      case 'generating': return '>';
       case 'complete': return '✓';
       case 'error': return '✗';
       default: return '•';
@@ -393,6 +494,8 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
     setGenerationComplete(false);
     setCompletedPackId(null);
     setCompletedSummary(null);
+    setPipelineStep(null);
+    setPendingClassification(null);
     if (completedPackId) {
       // Select the newly created pack
       fetchModulePacks().then(() => {
@@ -412,7 +515,7 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
             <div className="border-b border-white/10 pb-6 flex justify-between items-end">
               <div>
                 <h2 className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.4em] mb-2 animate-pulse">
-                  {generationComplete ? 'Generation Complete' : 'Module Pack Factory Active'}
+                  {generationComplete ? 'Generation Complete \u2014 Review stream below' : 'Module Pack Factory Active'}
                 </h2>
                 <h1 className="text-4xl md:text-5xl font-black text-white italic tracking-tighter">
                   {activeGeneration || 'Processing...'}
@@ -427,8 +530,56 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
             </div>
 
             <div className="grid lg:grid-cols-3 gap-8">
-              {/* Live Progress Log */}
+              {/* Main Content Area - switches based on pipeline step */}
               <div className="lg:col-span-2 space-y-4">
+                {pipelineStep === 'confirm_classification' && pendingClassification ? (
+                  <div className="h-[500px] overflow-y-auto pr-4 custom-scrollbar bg-white/5 rounded-3xl border border-white/5">
+                    <ClassificationConfirmation
+                      classification={pendingClassification}
+                      onConfirm={async (adjustments) => {
+                        // Confirm classification
+                        if (completedPackId) {
+                          await fetch(`${API_BASE}/${completedPackId}/confirm-classification`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ adjustments })
+                          });
+                        }
+                        setPipelineStep(null);
+                        setPendingClassification(null);
+                        // Continue with the stream - classification was confirmed inline
+                      }}
+                      onReclassify={async () => {
+                        if (completedPackId) {
+                          setPipelineStep(null);
+                          setPendingClassification(null);
+                          runPhase(completedPackId, 'classify-domain' as any);
+                        }
+                      }}
+                    />
+                  </div>
+                ) : pipelineStep === 'interview' && (selectedPack || completedPackId) ? (
+                  <div className="h-[500px] bg-white/5 rounded-3xl border border-white/5">
+                    <InterviewChat
+                      modulePackId={selectedPack?.id || completedPackId!}
+                      apiBase={API_BASE}
+                      onComplete={async () => {
+                        const packId = selectedPack?.id || completedPackId!;
+                        setPipelineStep(null);
+                        setActiveGeneration('Module Generation');
+
+                        // Refresh pack to get ideation data
+                        const packRes = await fetch(`${API_BASE}/${packId}`);
+                        const packData = await packRes.json();
+                        setSelectedPack(packData.modulePack);
+
+                        // Continue pipeline - run module generation
+                        runPhase(packId, 'generate-modules');
+                      }}
+                    />
+                  </div>
+                ) : (
+                <>
                 <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Execution Stream</h3>
                 <div
                   ref={overlayScrollRef}
@@ -444,6 +595,8 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
                   {progressEvents.map((event, i) => (
                     <div key={i} className="flex gap-4 items-start animate-in fade-in slide-in-from-left-4 duration-300">
                       <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest min-w-[100px] text-center shrink-0 ${
+                        event.phase === 'domain_classification' ? 'bg-amber-500/20 text-amber-400' :
+                        event.phase === 'ontology_refinement' ? 'bg-cyan-500/20 text-cyan-400' :
                         event.phase === 'expert_research' || event.phase === 'deep_research' ? 'bg-blue-500/20 text-blue-400' :
                         event.phase === 'ideation' || event.phase === 'self_interview' ? 'bg-purple-500/20 text-purple-400' :
                         event.phase === 'module_generation' || event.phase === 'generating' ? 'bg-emerald-500/20 text-emerald-400' :
@@ -488,6 +641,158 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
                             <span className="text-[9px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full shrink-0">{event.details?.category}</span>
                             <p className="text-xs text-slate-300 font-mono leading-relaxed">{event.message}</p>
                           </div>
+                        ) : event.status === 'classification_result' && event.details ? (
+                          <div className="bg-white/5 rounded-2xl border border-white/10 p-4 space-y-3 w-full">
+                            {/* Header: Domain badges + confidence */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 rounded-full text-xs font-bold">
+                                {event.details.primary_domain}
+                              </span>
+                              <span className="text-slate-500">{'>'}</span>
+                              <span className="px-3 py-1 bg-blue-500/20 text-blue-300 rounded-full text-xs font-bold">
+                                {event.details.sub_domain}
+                              </span>
+                              {event.details.confidence != null && (
+                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                  event.details.confidence >= 0.8 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
+                                }`}>
+                                  {Math.round(event.details.confidence * 100)}%
+                                </span>
+                              )}
+                              {event.details.secondary_domains?.length > 0 && (
+                                <div className="flex gap-1 ml-2">
+                                  {event.details.secondary_domains.map((sd: string, j: number) => (
+                                    <span key={j} className="px-2 py-0.5 bg-slate-500/20 text-slate-400 rounded-full text-[9px]">{sd}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            {/* Capabilities grid */}
+                            {event.details.capabilities?.length > 0 && (
+                              <div>
+                                <h5 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-2">Capabilities</h5>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                  {event.details.capabilities.map((cap: any, j: number) => (
+                                    <div key={j} className="bg-white/5 rounded-xl p-2 space-y-1">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs text-white font-bold">{cap.name}</span>
+                                        {cap.mapped_module_type && (
+                                          <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-[8px] font-bold">{cap.mapped_module_type}</span>
+                                        )}
+                                      </div>
+                                      {cap.sub_capabilities?.length > 0 && (
+                                        <div className="flex flex-wrap gap-1">
+                                          {cap.sub_capabilities.map((sc: string, k: number) => (
+                                            <span key={k} className="text-[8px] bg-white/5 text-slate-400 px-1.5 py-0.5 rounded">{sc}</span>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {/* Tag rows */}
+                            {event.details.data_entities?.length > 0 && (
+                              <div>
+                                <h5 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Data Entities</h5>
+                                <div className="flex flex-wrap gap-1">
+                                  {event.details.data_entities.map((de: any, j: number) => (
+                                    <span key={j} className="text-[9px] bg-cyan-500/15 text-cyan-300 px-2 py-0.5 rounded-full">{typeof de === 'string' ? de : de.name}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {event.details.compliance_domains?.length > 0 && (
+                              <div>
+                                <h5 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Compliance Domains</h5>
+                                <div className="flex flex-wrap gap-1">
+                                  {event.details.compliance_domains.map((cd: any, j: number) => (
+                                    <span key={j} className="text-[9px] bg-red-500/15 text-red-300 px-2 py-0.5 rounded-full">{typeof cd === 'string' ? cd : cd.name}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {event.details.workflow_patterns?.length > 0 && (
+                              <div>
+                                <h5 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Workflow Patterns</h5>
+                                <div className="flex flex-wrap gap-1">
+                                  {event.details.workflow_patterns.map((wp: any, j: number) => (
+                                    <span key={j} className="text-[9px] bg-purple-500/15 text-purple-300 px-2 py-0.5 rounded-full">{typeof wp === 'string' ? wp : wp.name}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {/* Regional factors */}
+                            {event.details.regional_factors && (
+                              <div className="flex gap-4">
+                                {event.details.regional_factors.key_legislation?.length > 0 && (
+                                  <div className="flex-1">
+                                    <h5 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Key Legislation</h5>
+                                    <div className="space-y-0.5">
+                                      {event.details.regional_factors.key_legislation.map((l: string, j: number) => (
+                                        <p key={j} className="text-[9px] text-slate-300">{l}</p>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {event.details.regional_factors.regulatory_bodies?.length > 0 && (
+                                  <div className="flex-1">
+                                    <h5 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1">Regulatory Bodies</h5>
+                                    <div className="space-y-0.5">
+                                      {event.details.regional_factors.regulatory_bodies.map((rb: string, j: number) => (
+                                        <p key={j} className="text-[9px] text-slate-300">{rb}</p>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ) : event.status === 'section_polling' ? (
+                          <div className="flex items-center gap-3 w-full">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs text-white font-bold">{event.details?.section_title || event.message}</p>
+                              {event.details?.status === 'thinking' ? (
+                                // Streaming mode — show live thought summary
+                                <p className="text-[10px] text-blue-300 mt-1 leading-relaxed line-clamp-2">
+                                  {event.details?.message || event.message}
+                                </p>
+                              ) : (
+                                // Polling fallback — show progress bar
+                                <div className="flex items-center gap-2 mt-1">
+                                  <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                                      style={{ width: `${((event.details?.attempt || 0) / (event.details?.maxAttempts || 60)) * 100}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-[9px] text-slate-400 font-mono shrink-0">
+                                    {event.details?.attempt || '?'}/{event.details?.maxAttempts || 60}
+                                  </span>
+                                </div>
+                              )}
+                              {event.details?.status !== 'thinking' && event.details?.section_focus && (
+                                <p className="text-[9px] text-slate-500 mt-1 truncate">{event.details.section_focus}</p>
+                              )}
+                            </div>
+                            <span className="animate-spin text-blue-400 shrink-0">⟳</span>
+                          </div>
+                        ) : event.status === 'section_complete' ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-emerald-400 shrink-0">✓</span>
+                            <p className="text-xs text-emerald-200 font-bold leading-relaxed">{event.message}</p>
+                          </div>
+                        ) : event.status === 'section_failed' ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-red-400 shrink-0">✗</span>
+                            <p className="text-xs text-red-300 leading-relaxed">{event.message}</p>
+                          </div>
+                        ) : event.status === 'section_partial' ? (
+                          <div className="flex items-start gap-2">
+                            <span className="text-amber-400 shrink-0">⚠</span>
+                            <p className="text-xs text-amber-200 leading-relaxed">{event.message}</p>
+                          </div>
                         ) : event.status === 'key_insight' ? (
                           <div className="flex items-start gap-2">
                             <span className="text-emerald-400 shrink-0">*</span>
@@ -506,6 +811,8 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
                     </div>
                   )}
                 </div>
+                </>
+                )}
               </div>
 
               {/* Status Panel */}
@@ -513,40 +820,33 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
                 <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Generation Status</h3>
                 <div className="bg-black border border-slate-800 rounded-3xl p-6 h-[500px] overflow-y-auto shadow-inner relative">
                   <div className="space-y-6">
-                    {/* Phase Progress */}
-                    <div className="space-y-4">
-                      <div className={`flex items-center gap-3 ${progressEvents.some(e => e.phase === 'expert_research') ? 'text-white' : 'text-slate-600'}`}>
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
-                          progressEvents.some(e => e.phase === 'expert_research' && e.status === 'complete') ? 'bg-emerald-500/30 text-emerald-400' :
-                          progressEvents.some(e => e.phase === 'expert_research') ? 'bg-blue-500/30 text-blue-400 animate-pulse' :
-                          'bg-slate-800'
-                        }`}>
-                          {progressEvents.some(e => e.phase === 'expert_research' && e.status === 'complete') ? '✓' : '1'}
-                        </div>
-                        <span className="text-sm font-bold">Expert Research</span>
-                      </div>
+                    {/* Phase Progress - 5 phases */}
+                    <div className="space-y-3">
+                      {[
+                        { phase: 'domain_classification', label: 'Classification', num: '1' },
+                        { phase: 'expert_research', label: 'Research', num: '2' },
+                        { phase: 'ontology_refinement', label: 'Ontology', num: '3' },
+                        { phase: 'ideation', label: 'Interview', num: '4' },
+                        { phase: 'module_generation', label: 'Generation', num: '5' }
+                      ].map(({ phase, label, num }) => {
+                        const isComplete = progressEvents.some(e => e.phase === phase && (e.status === 'complete' || e.status === 'phase_complete'));
+                        const isActive = progressEvents.some(e => e.phase === phase) && !isComplete;
+                        const isPipelineComplete = progressEvents.some(e => e.status === 'pipeline_complete');
+                        const finalComplete = phase === 'module_generation' && isPipelineComplete;
 
-                      <div className={`flex items-center gap-3 ${progressEvents.some(e => e.phase === 'ideation') ? 'text-white' : 'text-slate-600'}`}>
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
-                          progressEvents.some(e => e.phase === 'ideation' && e.status === 'complete') ? 'bg-emerald-500/30 text-emerald-400' :
-                          progressEvents.some(e => e.phase === 'ideation') ? 'bg-purple-500/30 text-purple-400 animate-pulse' :
-                          'bg-slate-800'
-                        }`}>
-                          {progressEvents.some(e => e.phase === 'ideation' && e.status === 'complete') ? '✓' : '2'}
-                        </div>
-                        <span className="text-sm font-bold">Ideation</span>
-                      </div>
-
-                      <div className={`flex items-center gap-3 ${progressEvents.some(e => e.phase === 'module_generation') ? 'text-white' : 'text-slate-600'}`}>
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
-                          progressEvents.some(e => e.status === 'pipeline_complete') ? 'bg-emerald-500/30 text-emerald-400' :
-                          progressEvents.some(e => e.phase === 'module_generation') ? 'bg-emerald-500/30 text-emerald-400 animate-pulse' :
-                          'bg-slate-800'
-                        }`}>
-                          {progressEvents.some(e => e.status === 'pipeline_complete') ? '✓' : '3'}
-                        </div>
-                        <span className="text-sm font-bold">Module Generation</span>
-                      </div>
+                        return (
+                          <div key={phase} className={`flex items-center gap-3 ${isActive || isComplete || finalComplete ? 'text-white' : 'text-slate-600'}`}>
+                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs ${
+                              isComplete || finalComplete ? 'bg-emerald-500/30 text-emerald-400' :
+                              isActive ? 'bg-blue-500/30 text-blue-400 animate-pulse' :
+                              'bg-slate-800'
+                            }`}>
+                              {isComplete || finalComplete ? '✓' : num}
+                            </div>
+                            <span className="text-xs font-bold">{label}</span>
+                          </div>
+                        );
+                      })}
                     </div>
 
                     {/* Summary when complete */}
@@ -576,9 +876,23 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
                       </div>
                     )}
 
-                    {/* Continue Button */}
+                    {/* Save/Copy + Continue Buttons */}
                     {generationComplete && (
-                      <div className="mt-8">
+                      <div className="mt-8 space-y-3">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleSaveLog}
+                            className="flex-1 py-3 bg-white/10 text-white font-bold rounded-xl hover:bg-white/20 transition-all text-xs uppercase tracking-widest"
+                          >
+                            Save Log
+                          </button>
+                          <button
+                            onClick={handleCopyLog}
+                            className="flex-1 py-3 bg-white/10 text-white font-bold rounded-xl hover:bg-white/20 transition-all text-xs uppercase tracking-widest"
+                          >
+                            {copyFeedback ? 'Copied!' : 'Copy Log'}
+                          </button>
+                        </div>
                         <button
                           onClick={handleCloseOverlay}
                           className="w-full py-4 bg-emerald-600 text-white font-black rounded-xl shadow-lg shadow-emerald-500/30 hover:bg-emerald-700 transition-all text-sm uppercase tracking-widest"
@@ -887,6 +1201,14 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
                   </div>
                 </div>
 
+                {/* Domain Picker */}
+                <DomainPicker
+                  selectedDomain={formData.selectedDomain}
+                  selectedSubDomain={formData.selectedSubDomain}
+                  onDomainChange={d => setFormData({ ...formData, selectedDomain: d })}
+                  onSubDomainChange={sd => setFormData({ ...formData, selectedSubDomain: sd })}
+                />
+
                 {/* Topic / Service Domain */}
                 <div>
                   <label className={UI.text.label}>Topic / Service Domain *</label>
@@ -950,6 +1272,36 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
                     rows={4}
                     className={`${UI.input} mt-2`}
                   />
+                </div>
+
+                {/* Interview Mode */}
+                <div>
+                  <label className={UI.text.label}>Interview Mode</label>
+                  <div className="flex gap-3 mt-2">
+                    {([
+                      { id: 'self_interview', label: 'Self-Interview', desc: 'AI interviews itself using research' },
+                      { id: 'interactive', label: 'Interactive', desc: 'Chat with AI to refine requirements' },
+                      { id: 'hybrid', label: 'Hybrid', desc: 'AI starts, you can jump in anytime' }
+                    ] as const).map(mode => (
+                      <button
+                        key={mode.id}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, interviewMode: mode.id })}
+                        className={`flex-1 py-3 px-4 rounded-xl font-bold text-sm transition-all ${
+                          formData.interviewMode === mode.id
+                            ? 'bg-emerald-600 text-white shadow-lg'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {mode.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">
+                    {formData.interviewMode === 'self_interview' && 'AI will interview itself using expert research to define requirements'}
+                    {formData.interviewMode === 'interactive' && 'You\'ll chat with the AI to collaboratively define requirements'}
+                    {formData.interviewMode === 'hybrid' && 'AI starts the interview, you can answer questions or let AI self-answer'}
+                  </p>
                 </div>
 
                 {/* Research Depth */}
@@ -1085,24 +1437,82 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
                 )}
               </div>
 
-              {/* Progress Steps */}
+              {/* Classification Card */}
+              {selectedPack.domain_classification && (
+                <div className={`${UI.card} p-6 mb-6`}>
+                  <h3 className={`${UI.text.label} mb-3`}>Domain Classification</h3>
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-sm font-bold">
+                      {selectedPack.domain_classification.primary_domain}
+                    </span>
+                    <span className="text-slate-400">{'>'}</span>
+                    <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-bold">
+                      {selectedPack.domain_classification.sub_domain}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      selectedPack.domain_classification.confidence >= 0.8 ? 'bg-emerald-100 text-emerald-600' :
+                      'bg-amber-100 text-amber-600'
+                    }`}>
+                      {Math.round(selectedPack.domain_classification.confidence * 100)}%
+                    </span>
+                  </div>
+                  {selectedPack.domain_classification.ontology?.capabilities?.length > 0 && (
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-500 mb-2">Ontology Capabilities</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedPack.domain_classification.ontology.capabilities.map((cap, i) => (
+                          <span key={i} className="px-2 py-1 bg-slate-100 rounded-lg text-xs text-slate-600">
+                            {cap.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Progress Steps - 5 phase pipeline */}
               <div className={`${UI.card} p-6 mb-6`}>
                 <h3 className={`${UI.text.label} mb-4`}>Generation Pipeline</h3>
                 <div className="space-y-4">
-                  {/* Expert Research */}
+                  {/* 1. Classification */}
+                  <div className="flex items-center gap-4">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
+                      selectedPack.progress.domain_classification_complete
+                        ? 'bg-emerald-100 text-emerald-600'
+                        : 'bg-slate-100 text-slate-400'
+                    }`}>
+                      {selectedPack.progress.domain_classification_complete ? '✓' : '1'}
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-bold text-slate-900">Classification</h4>
+                      <p className="text-sm text-slate-500">Domain classification and ontology</p>
+                    </div>
+                    {!selectedPack.progress.domain_classification_complete && selectedPack.status === 'draft' && (
+                      <button
+                        onClick={() => runPhase(selectedPack.id, 'classify-domain')}
+                        disabled={!!activeGeneration}
+                        className={UI.button.secondary}
+                      >
+                        Run
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 2. Expert Research */}
                   <div className="flex items-center gap-4">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
                       selectedPack.progress.expert_mode_complete
                         ? 'bg-emerald-100 text-emerald-600'
                         : 'bg-slate-100 text-slate-400'
                     }`}>
-                      {selectedPack.progress.expert_mode_complete ? '✓' : '1'}
+                      {selectedPack.progress.expert_mode_complete ? '✓' : '2'}
                     </div>
                     <div className="flex-1">
                       <h4 className="font-bold text-slate-900">Expert Research</h4>
                       <p className="text-sm text-slate-500">Deep research and domain expertise</p>
                     </div>
-                    {!selectedPack.progress.expert_mode_complete && selectedPack.status === 'draft' && (
+                    {selectedPack.progress.domain_classification_complete && !selectedPack.progress.expert_mode_complete && (
                       <button
                         onClick={() => runPhase(selectedPack.id, 'expert-research')}
                         disabled={!!activeGeneration}
@@ -1113,22 +1523,22 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
                     )}
                   </div>
 
-                  {/* Ideation */}
+                  {/* 3. Ontology Refinement */}
                   <div className="flex items-center gap-4">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
-                      selectedPack.progress.ideation_complete
+                      selectedPack.progress.ontology_refinement_complete
                         ? 'bg-emerald-100 text-emerald-600'
                         : 'bg-slate-100 text-slate-400'
                     }`}>
-                      {selectedPack.progress.ideation_complete ? '✓' : '2'}
+                      {selectedPack.progress.ontology_refinement_complete ? '✓' : '3'}
                     </div>
                     <div className="flex-1">
-                      <h4 className="font-bold text-slate-900">Ideation</h4>
-                      <p className="text-sm text-slate-500">Self-interview and requirements synthesis</p>
+                      <h4 className="font-bold text-slate-900">Ontology Refinement</h4>
+                      <p className="text-sm text-slate-500">Validate ontology against research</p>
                     </div>
-                    {selectedPack.progress.expert_mode_complete && !selectedPack.progress.ideation_complete && (
+                    {selectedPack.progress.expert_mode_complete && !selectedPack.progress.ontology_refinement_complete && selectedPack.domain_classification && (
                       <button
-                        onClick={() => runPhase(selectedPack.id, 'ideation')}
+                        onClick={() => runPhase(selectedPack.id, 'refine-ontology')}
                         disabled={!!activeGeneration}
                         className={UI.button.secondary}
                       >
@@ -1137,14 +1547,52 @@ export default function ModulePackUI({ onLoadManifests, availableManifests = [],
                     )}
                   </div>
 
-                  {/* Module Generation */}
+                  {/* 4. Ideation */}
+                  <div className="flex items-center gap-4">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
+                      selectedPack.progress.ideation_complete
+                        ? 'bg-emerald-100 text-emerald-600'
+                        : 'bg-slate-100 text-slate-400'
+                    }`}>
+                      {selectedPack.progress.ideation_complete ? '✓' : '4'}
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-bold text-slate-900">Interview / Ideation</h4>
+                      <p className="text-sm text-slate-500">
+                        {selectedPack.interview_mode === 'interactive' ? 'Interactive interview' :
+                         selectedPack.interview_mode === 'hybrid' ? 'Hybrid interview' :
+                         'Self-interview and requirements synthesis'}
+                      </p>
+                    </div>
+                    {selectedPack.progress.expert_mode_complete && !selectedPack.progress.ideation_complete && (
+                      <button
+                        onClick={() => {
+                          if (selectedPack.interview_mode === 'interactive') {
+                            // Show interview chat in overlay
+                            setPipelineStep('interview');
+                            setShowOverlay(true);
+                            setGenerationComplete(false);
+                            setActiveGeneration('Interactive Interview');
+                          } else {
+                            runPhase(selectedPack.id, 'ideation');
+                          }
+                        }}
+                        disabled={!!activeGeneration}
+                        className={UI.button.secondary}
+                      >
+                        {selectedPack.interview_mode === 'interactive' ? 'Start Chat' : 'Run'}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 5. Module Generation */}
                   <div className="flex items-center gap-4">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg ${
                       selectedPack.progress.modules_generated > 0
                         ? 'bg-emerald-100 text-emerald-600'
                         : 'bg-slate-100 text-slate-400'
                     }`}>
-                      {selectedPack.progress.modules_generated > 0 ? '✓' : '3'}
+                      {selectedPack.progress.modules_generated > 0 ? '✓' : '5'}
                     </div>
                     <div className="flex-1">
                       <h4 className="font-bold text-slate-900">Module Generation</h4>

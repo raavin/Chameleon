@@ -1,6 +1,70 @@
 import mongoose from 'mongoose';
 
 /**
+ * Domain Classification Ontology Capability Schema
+ */
+const OntologyCapabilitySchema = new mongoose.Schema({
+  id: String,
+  name: String,
+  sub_capabilities: [String],
+  confirmed_by_research: { type: Boolean, default: false },
+  mapped_module_type: String,
+  research_evidence: String
+}, { _id: false });
+
+/**
+ * Domain Classification Schema
+ * Result of AI domain classification before research
+ */
+const DomainClassificationSchema = new mongoose.Schema({
+  primary_domain: String,
+  sub_domain: String,
+  secondary_domains: [String],
+  ontology: {
+    capabilities: [OntologyCapabilitySchema],
+    data_entities: [String],
+    compliance_domains: [String],
+    workflow_patterns: [String]
+  },
+  regional_factors: {
+    regulatory_bodies: [String],
+    key_legislation: [String],
+    cultural_considerations: [String]
+  },
+  research_tracks_needed: [String],
+  confidence: { type: Number, min: 0, max: 1, default: 0.7 },
+  user_confirmed: { type: Boolean, default: false },
+  user_adjustments: mongoose.Schema.Types.Mixed
+}, { _id: false });
+
+/**
+ * Refined Ontology Schema
+ * Ontology validated and enriched by research findings
+ */
+const RefinedOntologySchema = new mongoose.Schema({
+  capabilities: [OntologyCapabilitySchema],
+  data_entities: [String],
+  compliance_domains: [String],
+  workflow_patterns: [String],
+  research_gaps: [String],
+  refined_at: { type: Date, default: Date.now }
+}, { _id: false });
+
+/**
+ * Interview Message Schema
+ * For interactive chat-style interview conversation
+ */
+const InterviewMessageSchema = new mongoose.Schema({
+  id: String,
+  role: { type: String, enum: ['agent', 'user', 'system'] },
+  content: String,
+  category: String,
+  question_id: String,
+  metadata: mongoose.Schema.Types.Mixed,
+  timestamp: { type: Date, default: Date.now }
+}, { _id: false });
+
+/**
  * Expert Research Category Schema
  * Tracks individual research areas within expert context
  */
@@ -59,6 +123,21 @@ const ExpertContextSchema = new mongoose.Schema({
     default: 'standard'
   },
   deep_research_interaction_id: String,
+  deep_research_sections: [{
+    section_id: String,
+    title: String,
+    status: { type: String, enum: ['completed', 'failed', 'skipped'] },
+    interaction_id: String,
+    content_length: Number,
+    completed_at: Date,
+    error: String
+  }],
+  deep_research_sources: [{
+    text: String,
+    url: String,
+    title: String,
+    extracted: Boolean
+  }],
   generated_at: { type: Date, default: Date.now }
 }, { _id: false });
 
@@ -186,6 +265,22 @@ const ModulePackSchema = new mongoose.Schema({
     project_name: String
   },
 
+  // Domain classification
+  domain_classification: DomainClassificationSchema,
+
+  // Refined ontology (post-research)
+  refined_ontology: RefinedOntologySchema,
+
+  // Interactive interview conversation
+  interview_conversation: [InterviewMessageSchema],
+
+  // Interview mode
+  interview_mode: {
+    type: String,
+    enum: ['self_interview', 'interactive', 'hybrid'],
+    default: 'self_interview'
+  },
+
   // Expert Mode output
   expert_context: ExpertContextSchema,
 
@@ -198,18 +293,20 @@ const ModulePackSchema = new mongoose.Schema({
   // Processing status
   status: {
     type: String,
-    enum: ['draft', 'researching', 'ideating', 'generating', 'completed', 'failed', 'partial'],
+    enum: ['draft', 'classifying', 'researching', 'ideating', 'generating', 'completed', 'failed', 'partial'],
     default: 'draft'
   },
   current_phase: {
     type: String,
-    enum: ['init', 'expert_research', 'ideation', 'module_planning', 'module_generation', 'validation', 'complete'],
+    enum: ['init', 'domain_classification', 'expert_research', 'ontology_refinement', 'ideation', 'module_planning', 'module_generation', 'validation', 'complete'],
     default: 'init'
   },
 
   // Progress tracking
   progress: {
+    domain_classification_complete: { type: Boolean, default: false },
     expert_mode_complete: { type: Boolean, default: false },
+    ontology_refinement_complete: { type: Boolean, default: false },
     ideation_complete: { type: Boolean, default: false },
     modules_planned: { type: Number, default: 0 },
     modules_generated: { type: Number, default: 0 },

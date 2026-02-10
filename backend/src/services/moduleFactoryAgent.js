@@ -56,7 +56,8 @@ export class ModuleFactoryAgent {
       modulePackId,
       expertContext,
       ideationDocument,
-      config
+      config,
+      refinedOntology = null
     } = modulePackConfig;
 
     this.emitProgress(onProgress, {
@@ -101,7 +102,8 @@ export class ModuleFactoryAgent {
             modulePlan,
             expertContext,
             ideationDocument,
-            results // Pass previously generated modules for reference
+            results, // Pass previously generated modules for reference
+            refinedOntology
           );
 
           // Generate the manifest
@@ -230,7 +232,7 @@ export class ModuleFactoryAgent {
    * Build focused context for a specific module
    * This is key to avoiding context explosion
    */
-  buildModuleContext(modulePlan, expertContext, ideationDocument, previousModules) {
+  buildModuleContext(modulePlan, expertContext, ideationDocument, previousModules, refinedOntology = null) {
     // Extract only relevant parts of expert context
     const relevantCategories = expertContext.research_categories?.filter(cat => {
       // Filter based on module type
@@ -304,7 +306,18 @@ export class ModuleFactoryAgent {
         description: modulePlan.description,
         keyFeatures: modulePlan.key_features,
         domains: modulePlan.domains || []
-      }
+      },
+
+      // Ontology context (if available)
+      ontologyContext: refinedOntology ? {
+        matchingCapability: refinedOntology.capabilities?.find(c =>
+          c.mapped_module_type === modulePlan.module_type
+        ) || null,
+        relatedEntities: refinedOntology.data_entities?.filter(e =>
+          modulePlan.key_features?.some(f => e.toLowerCase().includes(f.toLowerCase().split(' ')[0]))
+        ) || [],
+        complianceDomains: refinedOntology.compliance_domains || []
+      } : null
     };
   }
 
@@ -406,6 +419,14 @@ ${JSON.stringify(moduleContext.dataEntities?.slice(0, 5), null, 2) || '[]'}
 
 **RELATED MODULES (for relationships):**
 ${JSON.stringify(moduleContext.relatedModules, null, 2) || '[]'}
+${moduleContext.ontologyContext ? `
+**ONTOLOGY CONTEXT (validated domain knowledge):**
+${moduleContext.ontologyContext.matchingCapability ? `- Matching Capability: ${moduleContext.ontologyContext.matchingCapability.name}
+  Sub-capabilities: ${moduleContext.ontologyContext.matchingCapability.sub_capabilities?.join(', ') || 'None'}
+  Research Evidence: ${moduleContext.ontologyContext.matchingCapability.research_evidence || 'N/A'}` : '- No direct capability match'}
+${moduleContext.ontologyContext.relatedEntities.length > 0 ? `- Related Data Entities: ${moduleContext.ontologyContext.relatedEntities.join(', ')}` : ''}
+${moduleContext.ontologyContext.complianceDomains.length > 0 ? `- Compliance Domains: ${moduleContext.ontologyContext.complianceDomains.join(', ')}` : ''}
+` : ''}
 
 **RESEARCH SOURCES (use to populate research_artifacts and library):**
 ${JSON.stringify([
@@ -507,6 +528,7 @@ Return ONLY valid JSON. Do not wrap in markdown code blocks.
       ],
       "research_artifacts": [
         {
+          "id": "unique_artifact_id",
           "title": "Source or regulation title",
           "url": "https://example.com/source",
           "type": "legislation|standard|guideline|research",
@@ -518,11 +540,10 @@ Return ONLY valid JSON. Do not wrap in markdown code blocks.
   ],
   "library": {
     "legislation_key": {
-      "title": "Full Act/Regulation Title",
-      "citation": "Official citation reference",
-      "url": "https://example.com/legislation",
-      "sections": ["Relevant section numbers"],
-      "summary": "Brief summary of relevance"
+      "act_name": "Full Act/Regulation Title",
+      "section_title": "Relevant Section Title",
+      "content": "Key content or requirements from this legislation",
+      "analysis": "How this legislation applies to the module"
     }
   }
 }
@@ -606,10 +627,41 @@ Generate 10-20 well-designed fields per domain. Use simple string arrays for opt
       // Ensure research_artifacts and governance_rules exist
       if (!domain.research_artifacts) domain.research_artifacts = [];
       if (!domain.governance_rules) domain.governance_rules = [];
+
+      // Fix research_artifacts: ensure each has an id
+      for (let i = 0; i < domain.research_artifacts.length; i++) {
+        const artifact = domain.research_artifacts[i];
+        if (!artifact.id) {
+          artifact.id = `artifact_${domain.id}_${i + 1}`;
+        }
+      }
     }
 
     // Ensure library exists
     if (!manifest.library) manifest.library = {};
+
+    // Fix library entries: ensure act_name exists (AI sometimes generates "title" instead)
+    if (typeof manifest.library === 'object') {
+      for (const key of Object.keys(manifest.library)) {
+        const entry = manifest.library[key];
+        if (!entry.act_name && entry.title) {
+          entry.act_name = entry.title;
+          delete entry.title;
+        }
+        if (!entry.act_name) {
+          entry.act_name = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        }
+        if (!entry.section_title) {
+          entry.section_title = entry.citation || entry.sections?.[0] || 'General';
+        }
+        if (!entry.content) {
+          entry.content = entry.summary || '';
+        }
+        if (!entry.analysis) {
+          entry.analysis = entry.summary || '';
+        }
+      }
+    }
 
     return manifest;
   }
